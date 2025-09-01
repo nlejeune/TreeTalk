@@ -1,0 +1,16 @@
+# Requis fonctionnels
+
+1. L'application pourra avoir pour source de données différents intrants :
+    - Upload manuel de fichier GEDCOM
+    - API du site FamilySearch
+2. L'application doit avoir un serveur MCP interne pour exposer ses informations à des LLM externes dans le but d'offrir une fonctionnalité de chat
+3. L'application est bâtie en plusieurs sections :
+    Section 1 : Gestion des sources de données : Import local de données (GEDCOM), Connectivité avec des sources externes (exemple : API FamilySearch)
+    Section 2 : Fenêtre de chat type ChatGPT pour discuter avec ses données
+
+# Requis techniques
+
+1. La base de donnée sera une base de donnée Postgresql
+2. Le language de programmation pour le backend est python
+3. Le language de programmation pour le frontend est Javascript avec le framework React
+4. L'application sera déployée sur docker

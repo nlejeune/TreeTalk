@@ -28,4 +28,4 @@ Follow this structured approach to analyze and document the project :
    - Documentation should be written in the document number 1
   
 2. **High level architecture** [ENABLE=TRUE]
-   - Define target high level architecture
+   - Define target high level architecture in the document number 2

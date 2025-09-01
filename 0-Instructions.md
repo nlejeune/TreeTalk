@@ -1,8 +1,8 @@
-# FamilySearch MCP server
+# TreeChat
 
 ## Summary
-A Model Context Protocol (MCP) server for FamilySearch APIs. 
-It allows AI tools like Claude or Cursor to interact with FamilySearch’s family history data directly.
+TreeChat - Converse with Your Family History
+TreeChat is an innovative genealogy MCP (Model Context Protocol) server that transforms how you explore and interact with your family history. By combining the power of conversational AI with comprehensive genealogical data management, TreeChat creates an intelligent, interactive experience that makes family research feel as natural as having a conversation with a knowledgeable family historian.
 
 ## Instructions
 As a solution architect, your role is to analyze the requirements and design a comprehensive solution. Follow these guidelines :
@@ -20,7 +20,7 @@ As a solution architect, your role is to analyze the requirements and design a c
 11. **Do not invent content** - If information for a section is not available, note this gap rather than creating fictional details
 
 ## Methodology
-Follow this structured approach to analyze and document the FamilySearch MCP server project :
+Follow this structured approach to analyze and document the project :
 
 1. **Requirements analysis** [ENABLE=TRUE]
    - Gather and analyze business requirements
@@ -28,6 +28,4 @@ Follow this structured approach to analyze and document the FamilySearch MCP ser
    - Documentation should be written in the document number 1
   
 2. **High level architecture** [ENABLE=TRUE]
-   - Define actual architecture state
-   - Define target architecture state
-   - Identify key architectural changes
+   - Define target high level architecture

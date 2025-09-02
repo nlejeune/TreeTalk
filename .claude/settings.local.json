@@ -7,7 +7,8 @@
       "Bash(curl:*)",
       "Bash(dir:*)",
       "Bash(mkdir:*)",
-      "Bash(copy \".env.example\" \".env\")"
+      "Bash(copy \".env.example\" \".env\")",
+      "Bash(touch:*)"
     ],
     "deny": [],
     "ask": []

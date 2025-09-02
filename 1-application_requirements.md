@@ -17,6 +17,7 @@ By combining the power of conversational artificial intelligence with comprehens
 2. The programming language for the backend is Python
 3. The programming language for the frontend is Python with the streamlit framework
 4. The application will be deployed on Docker
+5. Configurations like API keys should be encrypted and persist when the container is restarted or upgraded
 
 ## 3. Backlog (Epics and User Stories)
 
@@ -26,7 +27,8 @@ By combining the power of conversational artificial intelligence with comprehens
     - Upload accepts only .ged formats.
     - User is notified in case of success or failure.
     - Data is stored in Postgres database.
-    - Connection to FamilySearch
+    - There is no way to upload multiple time the same .ged fil
+    - The database contain no duplicated entries
 
 - User story 1.2: **As a user**, I want to connect my FamilySearch account via their API to synchronize my family data.
 - Acceptance criteria:
@@ -34,10 +36,10 @@ By combining the power of conversational artificial intelligence with comprehens
     - Initial data synchronization.
     - Ability to launch manual resynchronization.
 
-- User story 1.3: **As a user**, I want to see and manage all my data sources (imported GEDCOM, connected APIs) from a single interface.
+- User story 1.3: **As a user**, I want to see and manage all my data sources (imported GEDCOM)
 - Acceptance criteria:
-    - Dashboard listing sources.
-    - Ability to delete a source.
+    - Dashboard listing ged files.
+    - Ability to delete a ged file (and all associated tables entries in the SQL database)
     - Visible synchronization status (last update date, success/error).
 
 ### Epic 2: Family Data Exploration - Goal: Allow intuitive navigation in the family tree.
@@ -45,7 +47,6 @@ By combining the power of conversational artificial intelligence with comprehens
 - Acceptance criteria:
     - Interactive graphical display (zoom, movement).
     - Each person clickable with detailed profile.
-    - Person search
 
 - User story 2.2: **As a user**, I want to search for an ancestor by name to find them quickly.
 - Acceptance criteria:

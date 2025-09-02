@@ -4,215 +4,821 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TreeTalk - Converse with Your Family History</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        /* Header and Navigation */
+        .header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+        }
+
+        .nav-tab {
+            background: none;
+            border: none;
+            color: #bdc3c7;
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            transition: all 0.3s ease;
+            font-size: 16px;
+        }
+
+        .nav-tab:hover {
+            background-color: rgba(255,255,255,0.1);
+            color: white;
+        }
+
+        .nav-tab.active {
+            background-color: #34495e;
+            color: white;
+        }
+
+        /* Main Content */
+        .main-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+            min-height: calc(100vh - 80px);
+        }
+
+        /* Left Sidebar */
+        .sidebar {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: fit-content;
+            position: sticky;
+            top: 2rem;
+        }
+
+        .gedcom-selector {
+            margin-bottom: 2rem;
+        }
+
+        .gedcom-selector label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+        }
+
+        .gedcom-selector select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e6ed;
+            border-radius: 6px;
+            font-size: 14px;
+            background-color: white;
+        }
+
+        .search-section h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 18px;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e6ed;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 1rem;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .family-members-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .family-member {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .family-member:hover {
+            background-color: #e9ecef;
+            transform: translateX(2px);
+        }
+
+        .family-member.selected {
+            background-color: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+
+        .member-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .member-dates {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .family-member.selected .member-dates {
+            color: rgba(255,255,255,0.8);
+        }
+
+        /* Main Content Area */
+        .content-area {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .family-tree-section {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            flex: 1;
+        }
+
+        .section-title {
+            color: #2c3e50;
+            margin-bottom: 1.5rem;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .family-tree-container {
+            position: relative;
+            height: 500px;
+            border: 2px dashed #e0e6ed;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+
+        .tree-placeholder {
+            text-align: center;
+            color: #6c757d;
+        }
+
+        .tree-placeholder h3 {
+            margin-bottom: 0.5rem;
+            color: #495057;
+        }
+
+        /* Family Tree Visualization Mock */
+        .family-tree-mock {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        .tree-node {
+            position: absolute;
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 0.5rem;
+            text-align: center;
+            min-width: 120px;
+            font-size: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tree-node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .tree-node.male {
+            border-color: #3498db;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        }
+
+        .tree-node.female {
+            border-color: #e91e63;
+            background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%);
+        }
+
+        .tree-node.unknown {
+            border-color: #27ae60;
+            background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+        }
+
+        .node-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .node-dates {
+            color: #666;
+            font-size: 10px;
+        }
+
+        /* Chat Section */
+        .chat-section {
+            background: white;
+            border-radius: 8px;
+            padding: 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e9ecef;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .chat-message {
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            color: white;
+        }
+
+        .user-avatar {
+            background: #3498db;
+        }
+
+        .ai-avatar {
+            background: #9b59b6;
+        }
+
+        .message-content {
+            flex: 1;
+            background: white;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .chat-input-container {
+            padding: 1rem;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 2px solid #e0e6ed;
+            border-radius: 20px;
+            resize: none;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .send-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .send-button:hover {
+            transform: scale(1.05);
+        }
+
+        /* Configuration Page */
+        .config-page,
+        .gedcom-page {
+            display: none;
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e6ed;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .upload-area {
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            background: #f8f9ff;
+            margin-bottom: 2rem;
+            transition: all 0.2s ease;
+        }
+
+        .upload-area:hover {
+            background: #f0f8ff;
+            border-color: #2980b9;
+        }
+
+        .gedcom-list {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .gedcom-item {
+            background: white;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .gedcom-info h4 {
+            margin-bottom: 0.25rem;
+            color: #2c3e50;
+        }
+
+        .gedcom-meta {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .suggestion-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.75rem;
+        }
+
+        .suggestion-btn {
+            background: #ecf0f1;
+            border: 1px solid #bdc3c7;
+            color: #2c3e50;
+            padding: 0.375rem 0.75rem;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .suggestion-btn:hover {
+            background: #d5dbdb;
+        }
+
+        /* Single page layout - configuration and gedcom pages full width */
+        .single-page {
+            grid-column: 1 / -1;
+        }
+    </style>
 </head>
 <body>
-    <header class="main-header">
-        <div class="header-content">
-            <h1 class="app-title">TreeTalk</h1>
-            <nav class="main-nav">
-                <button class="nav-btn active" data-tab="exploration">Data Exploration</button>
-                <button class="nav-btn" data-tab="configuration">Configuration</button>
-                <button class="nav-btn" data-tab="gedcom">GEDCOM Management</button>
-            </nav>
+    <div class="header">
+        <div class="nav-container">
+            <div class="nav-tabs">
+                <button class="nav-tab active" onclick="showTab('exploration')">Data Exploration</button>
+                <button class="nav-tab" onclick="showTab('config')">Configuration</button>
+                <button class="nav-tab" onclick="showTab('gedcom')">GEDCOM Management</button>
+            </div>
         </div>
-    </header>
+    </div>
 
-    <main class="main-content">
-        <!-- Data Exploration Tab -->
-        <div id="exploration" class="tab-content active">
+    <!-- Data Exploration Page -->
+    <div id="exploration-page" class="main-content">
+        <div class="sidebar">
             <div class="gedcom-selector">
                 <label for="gedcom-select">Select GEDCOM File:</label>
                 <select id="gedcom-select">
-                    <option value="">-- Select a GEDCOM file --</option>
-                    <option value="sample1">Sample Family Tree.ged</option>
-                    <option value="sample2">Johnson Family.ged</option>
+                    <option value="">-- Select a file --</option>
+                    <option value="sample-family">Sample Family Tree.ged</option>
+                    <option value="smith-family">Smith Family History.ged</option>
                 </select>
             </div>
 
-            <div class="content-grid">
-                <div class="left-panel">
-                    <section class="family-members-section">
-                        <h2>Family Members</h2>
-                        <div class="search-container">
-                            <input type="text" id="person-search" placeholder="Search by name..." />
-                            <button class="search-btn">🔍</button>
-                        </div>
-                        <div class="family-list">
-                            <div class="person-item" data-person="john-smith">
-                                <span class="person-name">John Smith</span>
-                                <span class="person-dates">(1850-1920)</span>
-                            </div>
-                            <div class="person-item" data-person="mary-smith">
-                                <span class="person-name">Mary Smith</span>
-                                <span class="person-dates">(1855-1925)</span>
-                            </div>
-                            <div class="person-item" data-person="robert-smith">
-                                <span class="person-name">Robert Smith</span>
-                                <span class="person-dates">(1875-1950)</span>
-                            </div>
-                            <div class="person-item" data-person="elizabeth-jones">
-                                <span class="person-name">Elizabeth Jones</span>
-                                <span class="person-dates">(1820-1890)</span>
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                <div class="center-panel">
-                    <section class="family-tree-section">
-                        <h2>Family Tree Visualization</h2>
-                        <div class="tree-controls">
-                            <button class="zoom-in">🔍+</button>
-                            <button class="zoom-out">🔍-</button>
-                            <button class="center-view">⌂</button>
-                        </div>
-                        <div id="family-tree-container">
-                            <svg id="family-tree-svg">
-                                <!-- Family tree visualization will be rendered here -->
-                            </svg>
-                        </div>
-                    </section>
-                </div>
-            </div>
-
-            <div class="bottom-panel">
-                <section class="chat-section">
-                    <h2>Chat with Your Family History</h2>
-                    <div class="chat-container">
-                        <div class="chat-messages" id="chat-messages">
-                            <div class="message system-message">
-                                <p>Welcome to TreeTalk! Ask me anything about your family history. For example: "Tell me about John Smith" or "Who are Mary's children?"</p>
-                            </div>
-                        </div>
-                        <div class="chat-input-container">
-                            <input type="text" id="chat-input" placeholder="Ask about your family history..." />
-                            <button id="send-message">Send</button>
-                        </div>
-                    </div>
-                </section>
-            </div>
-        </div>
-
-        <!-- Configuration Tab -->
-        <div id="configuration" class="tab-content">
-            <div class="config-container">
-                <h2>API Configuration</h2>
-                <section class="api-config">
-                    <h3>OpenRouter API Settings</h3>
-                    <div class="form-group">
-                        <label for="openrouter-key">OpenRouter API Key:</label>
-                        <input type="password" id="openrouter-key" placeholder="Enter your OpenRouter API key" />
-                        <button class="toggle-visibility" data-target="openrouter-key">👁️</button>
-                    </div>
-                    <div class="form-group">
-                        <label for="openrouter-model">Preferred Model:</label>
-                        <select id="openrouter-model">
-                            <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B (Free)</option>
-                            <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                            <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
-                        </select>
-                    </div>
-                    <button class="save-config">Save Configuration</button>
-                </section>
-
-                <section class="api-config">
-                    <h3>FamilySearch API Settings (Optional)</h3>
-                    <div class="form-group">
-                        <label for="familysearch-key">FamilySearch Client ID:</label>
-                        <input type="text" id="familysearch-key" placeholder="Enter your FamilySearch client ID" />
-                    </div>
-                    <button class="save-config">Save Configuration</button>
-                </section>
-
-                <section class="config-status">
-                    <h3>Configuration Status</h3>
-                    <div class="status-item">
-                        <span class="status-label">OpenRouter API:</span>
-                        <span class="status-indicator not-configured">Not Configured</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">FamilySearch API:</span>
-                        <span class="status-indicator not-configured">Not Configured</span>
-                    </div>
-                </section>
-            </div>
-        </div>
-
-        <!-- GEDCOM Management Tab -->
-        <div id="gedcom" class="tab-content">
-            <div class="gedcom-container">
-                <h2>GEDCOM File Management</h2>
+            <div class="search-section">
+                <h3>Family Members</h3>
+                <input type="text" class="search-box" placeholder="Search by name..." oninput="filterMembers(this.value)">
                 
-                <section class="upload-section">
-                    <h3>Upload GEDCOM File</h3>
-                    <div class="upload-area" id="upload-area">
-                        <div class="upload-content">
-                            <div class="upload-icon">📁</div>
-                            <p>Drag and drop your GEDCOM file here, or click to browse</p>
-                            <input type="file" id="file-input" accept=".ged,.gedcom" />
-                            <button class="browse-btn">Browse Files</button>
-                        </div>
+                <div class="family-members-list">
+                    <div class="family-member" onclick="selectMember(this, 'john-smith')">
+                        <div class="member-name">John Smith</div>
+                        <div class="member-dates">1850-1920 • Male</div>
                     </div>
-                    <div class="upload-progress" id="upload-progress" style="display: none;">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progress-fill"></div>
-                        </div>
-                        <span class="progress-text" id="progress-text">0%</span>
+                    <div class="family-member" onclick="selectMember(this, 'mary-smith')">
+                        <div class="member-name">Mary Johnson Smith</div>
+                        <div class="member-dates">1855-1925 • Female</div>
                     </div>
-                </section>
-
-                <section class="files-section">
-                    <h3>Uploaded GEDCOM Files</h3>
-                    <div class="files-list">
-                        <div class="file-item">
-                            <div class="file-info">
-                                <span class="file-name">Sample Family Tree.ged</span>
-                                <span class="file-size">2.3 MB</span>
-                                <span class="file-date">Uploaded: 2024-01-15</span>
-                                <span class="file-status status-success">✓ Processed</span>
-                            </div>
-                            <div class="file-actions">
-                                <button class="view-btn">View Details</button>
-                                <button class="delete-btn">Delete</button>
-                            </div>
-                        </div>
-                        
-                        <div class="file-item">
-                            <div class="file-info">
-                                <span class="file-name">Johnson Family.ged</span>
-                                <span class="file-size">1.8 MB</span>
-                                <span class="file-date">Uploaded: 2024-01-10</span>
-                                <span class="file-status status-success">✓ Processed</span>
-                            </div>
-                            <div class="file-actions">
-                                <button class="view-btn">View Details</button>
-                                <button class="delete-btn">Delete</button>
-                            </div>
-                        </div>
+                    <div class="family-member" onclick="selectMember(this, 'robert-smith')">
+                        <div class="member-name">Robert Smith</div>
+                        <div class="member-dates">1878-1955 • Male</div>
                     </div>
-                </section>
-
-                <section class="import-status">
-                    <h3>Import Status</h3>
-                    <div class="status-log">
-                        <div class="log-entry">
-                            <span class="log-timestamp">2024-01-15 14:30:22</span>
-                            <span class="log-message">Sample Family Tree.ged: Successfully imported 847 persons and 1,203 relationships</span>
-                            <span class="log-status success">Success</span>
-                        </div>
-                        <div class="log-entry">
-                            <span class="log-timestamp">2024-01-10 09:15:45</span>
-                            <span class="log-message">Johnson Family.ged: Successfully imported 623 persons and 892 relationships</span>
-                            <span class="log-status success">Success</span>
-                        </div>
+                    <div class="family-member" onclick="selectMember(this, 'elizabeth-smith')">
+                        <div class="member-name">Elizabeth Smith</div>
+                        <div class="member-dates">1880-1960 • Female</div>
                     </div>
-                </section>
+                    <div class="family-member" onclick="selectMember(this, 'william-doe')">
+                        <div class="member-name">William Doe</div>
+                        <div class="member-dates">1825-1890 • Male</div>
+                    </div>
+                </div>
             </div>
         </div>
-    </main>
 
-    <script src="app.js"></script>
+        <div class="content-area">
+            <div class="family-tree-section">
+                <h2 class="section-title">Family Tree Visualization</h2>
+                <div class="family-tree-container" id="tree-container">
+                    <div class="tree-placeholder">
+                        <h3>Select a family member to view their family tree</h3>
+                        <p>4 layers of relationships will be displayed with color coding:<br>
+                        <span style="color: #3498db;">Blue for men</span> • 
+                        <span style="color: #e91e63;">Pink for women</span> • 
+                        <span style="color: #27ae60;">Green for undefined</span><br><br>
+                        Plain lines = parent-children relations<br>
+                        Dotted lines = marriage relations</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-section">
+                <div class="chat-header">
+                    <h2 class="section-title" style="margin: 0; color: white;">Chat with Your Family History</h2>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-message">
+                        <div class="message-avatar ai-avatar">AI</div>
+                        <div class="message-content">
+                            Hello! I'm here to help you explore your family history. Ask me anything about your ancestors, descendants, or relationships in your family tree.
+                            <div class="suggestion-buttons">
+                                <button class="suggestion-btn" onclick="sendSuggestion('Tell me about John Smith')">Tell me about John Smith</button>
+                                <button class="suggestion-btn" onclick="sendSuggestion('Who are Mary\'s children?')">Who are Mary's children?</button>
+                                <button class="suggestion-btn" onclick="sendSuggestion('Show me the oldest person')">Show me the oldest person</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <textarea class="chat-input" rows="2" placeholder="Ask about your family history..." onkeypress="handleEnter(event)"></textarea>
+                    <button class="send-button" onclick="sendMessage()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Page -->
+    <div class="main-content" style="display: none;">
+        <div id="config-page" class="config-page single-page">
+            <h2 class="section-title">Configuration</h2>
+            
+            <div class="form-group">
+                <label for="openrouter-key">OpenRouter API Key:</label>
+                <input type="password" id="openrouter-key" placeholder="Enter your OpenRouter API key">
+                <small style="color: #6c757d; display: block; margin-top: 0.5rem;">
+                    Your API key will be encrypted and stored securely.
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="familysearch-client">FamilySearch Client ID (Optional):</label>
+                <input type="text" id="familysearch-client" placeholder="Enter your FamilySearch Client ID">
+            </div>
+
+            <button class="btn" onclick="saveConfig()">Save Configuration</button>
+
+            <div style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 6px;">
+                <h4 style="margin-bottom: 0.5rem;">Current Status:</h4>
+                <p id="config-status" style="color: #e74c3c;">API keys not configured</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- GEDCOM Management Page -->
+    <div class="main-content" style="display: none;">
+        <div id="gedcom-page" class="gedcom-page single-page">
+            <h2 class="section-title">GEDCOM File Management</h2>
+            
+            <div class="upload-area" onclick="document.getElementById('file-upload').click()">
+                <input type="file" id="file-upload" accept=".ged" style="display: none;" onchange="handleFileUpload(this)">
+                <h3>Upload GEDCOM File</h3>
+                <p>Click here or drag and drop a .ged file</p>
+                <small style="color: #6c757d;">Supported format: GEDCOM (.ged) • Maximum size: 50MB</small>
+            </div>
+
+            <div class="gedcom-list">
+                <h3 style="margin-bottom: 1rem;">Imported Files</h3>
+                
+                <div class="gedcom-item">
+                    <div class="gedcom-info">
+                        <h4>Sample Family Tree.ged</h4>
+                        <div class="gedcom-meta">
+                            Imported: March 15, 2024 • 156 individuals • 89 families
+                        </div>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteGedcom('sample')">Delete</button>
+                </div>
+
+                <div class="gedcom-item">
+                    <div class="gedcom-info">
+                        <h4>Smith Family History.ged</h4>
+                        <div class="gedcom-meta">
+                            Imported: March 10, 2024 • 203 individuals • 127 families
+                        </div>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteGedcom('smith')">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching functionality
+        function showTab(tabName) {
+            // Hide all pages
+            const pages = document.querySelectorAll('.main-content');
+            pages.forEach(page => page.style.display = 'none');
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected page and activate tab
+            if (tabName === 'exploration') {
+                document.getElementById('exploration-page').style.display = 'grid';
+            } else {
+                pages[tabName === 'config' ? 1 : 2].style.display = 'block';
+            }
+            
+            // Activate the clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Family member selection
+        function selectMember(element, memberId) {
+            // Remove selection from all members
+            document.querySelectorAll('.family-member').forEach(member => {
+                member.classList.remove('selected');
+            });
+            
+            // Select clicked member
+            element.classList.add('selected');
+            
+            // Show family tree for selected member
+            showFamilyTree(memberId);
+        }
+
+        // Show family tree visualization
+        function showFamilyTree(memberId) {
+            const container = document.getElementById('tree-container');
+            container.innerHTML = `
+                <div class="family-tree-mock" style="display: block;">
+                    <!-- Sample family tree nodes with color coding -->
+                    <div class="tree-node male" style="top: 50px; left: 200px;">
+                        <div class="node-name">William Doe</div>
+                        <div class="node-dates">1825-1890</div>
+                    </div>
+                    <div class="tree-node female" style="top: 50px; left: 350px;">
+                        <div class="node-name">Sarah Doe</div>
+                        <div class="node-dates">1830-1895</div>
+                    </div>
+                    <div class="tree-node male" style="top: 200px; left: 275px;">
+                        <div class="node-name">John Smith</div>
+                        <div class="node-dates">1850-1920</div>
+                    </div>
+                    <div class="tree-node female" style="top: 200px; left: 425px;">
+                        <div class="node-name">Mary Smith</div>
+                        <div class="node-dates">1855-1925</div>
+                    </div>
+                    <div class="tree-node male" style="top: 350px; left: 200px;">
+                        <div class="node-name">Robert Smith</div>
+                        <div class="node-dates">1878-1955</div>
+                    </div>
+                    <div class="tree-node female" style="top: 350px; left: 350px;">
+                        <div class="node-name">Elizabeth Smith</div>
+                        <div class="node-dates">1880-1960</div>
+                    </div>
+                    
+                    <!-- Connection lines (simplified for mockup) -->
+                    <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+                        <!-- Parent-child connections (plain lines) -->
+                        <line x1="275" y1="120" x2="350" y2="170" stroke="#333" stroke-width="2"/>
+                        <line x1="425" y1="120" x2="350" y2="170" stroke="#333" stroke-width="2"/>
+                        <line x1="350" y1="270" x2="275" y2="320" stroke="#333" stroke-width="2"/>
+                        <line x1="350" y1="270" x2="425" y2="320" stroke="#333" stroke-width="2"/>
+                        
+                        <!-- Marriage connections (dotted lines) -->
+                        <line x1="350" y1="200" x2="500" y2="200" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+                        <line x1="275" y1="350" x2="425" y2="350" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+                    </svg>
+                </div>
+            `;
+        }
+
+        // Search functionality
+        function filterMembers(searchTerm) {
+            const members = document.querySelectorAll('.family-member');
+            members.forEach(member => {
+                const name = member.querySelector('.member-name').textContent.toLowerCase();
+                if (name.includes(searchTerm.toLowerCase())) {
+                    member.style.display = 'block';
+                } else {
+                    member.style.display = 'none';
+                }
+            });
+        }
+
+        // Chat functionality
+        function sendMessage() {
+            const input = document.querySelector('.chat-input');
+            const message = input.value.trim();
+            if (message) {
+                addMessage('user', message);
+                input.value = '';
+                
+                // Simulate AI response
+                setTimeout(() => {
+                    addMessage('ai', `I understand you're asking about "${message}". Based on your family data stored in PostgreSQL, I can help you explore that information. This would be processed using the OpenRouter API with context from your genealogical database.`);
+                }, 1000);
+            }
+        }
+
+        function sendSuggestion(message) {
+            addMessage('user', message);
+            setTimeout(() => {
+                addMessage('ai', `Great question! Here's what I found in your family tree about that. This response would be generated using the OpenRouter API with context from your PostgreSQL genealogical database.`);
+            }, 1000);
+        }
+
+        function addMessage(type, content) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar ${type === 'user' ? 'user-avatar' : 'ai-avatar'}">
+                    ${type === 'user' ? 'U' : 'AI'}
+                </div>
+                <div class="message-content">${content}</div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function handleEnter(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // Configuration functions
+        function saveConfig() {
+            const openrouterKey = document.getElementById('openrouter-key').value;
+            const familysearchClient = document.getElementById('familysearch-client').value;
+            
+            if (openrouterKey) {
+                document.getElementById('config-status').innerHTML = 
+                    '<span style="color: #27ae60;">✓ OpenRouter API key configured and encrypted</span>';
+                alert('Configuration saved! API keys are encrypted and stored securely.');
+            } else {
+                alert('Please enter at least the OpenRouter API key');
+            }
+        }
+
+        // GEDCOM management functions
+        function handleFileUpload(input) {
+            const file = input.files[0];
+            if (file && file.name.endsWith('.ged')) {
+                alert(`File "${file.name}" selected for upload. This would be processed by the GEDCOM parser and imported into the PostgreSQL database.`);
+            } else {
+                alert('Please select a valid GEDCOM (.ged) file');
+            }
+        }
+
+        function deleteGedcom(fileId) {
+            if (confirm('Are you sure you want to delete this GEDCOM file? This will remove all related data from the database and cannot be undone.')) {
+                alert(`GEDCOM file would be deleted from both the filesystem and PostgreSQL database, removing all persons and relationships from that source.`);
+            }
+        }
+    </script>
 </body>
 </html>

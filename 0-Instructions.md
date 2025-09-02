@@ -40,22 +40,29 @@ CHANGELOG File: CHANGELOG.md is a file that describes what's happening in the re
 Follow this structured approach to analyze and document the project :
 
 1. **Requirements analysis** [ENABLE=TRUE]
-   - Gather and analyze business requirements
+   - Gather and analyze requirements
    - Define success criteria and metrics
-   - Documentation should be written in the document number 1
+   - Documentation exist in the document number 1
   
 2. **High level architecture documentation** [ENABLE=TRUE]
    - Define target high level architecture
-   - High level architecture  should be written in the document number 2 (replace the existing one)
+   - Document High level architecture in the document number 2 (replace the existing one)
 
-3. **User experience** [ENABLE=TRUE]
+3. **User experience** [ENABLE=FALSE]
    - Gather and analyse UX and UI requirements
    - UI and UX requirement are described in the document number 3
-   - Generated an HTML prototype of the UI in the ux_design folder
+   - Generated an HTML prototype of the UI in the ux_design folder (replace the existing one)
 
-4. **Code generation** [ENABLE=FALSE]
+4. **Code generation** [ENABLE=TRUE]
    - If the folder src exist, use it as your code base and adjust
    - If the folder src does not exist, create it and build the first version of the application in it
+   - Technical and functional requirements are described in the document number 1
+   - High level architecture is described in the document number 2
+   - UI and UX requirements are described in the document number 3
+   - Document properly the code to make it easily understandable by a human (Comment block before each class and function)
+   - For each function, create and maintain unit tests
+   - Run all unit test at the end to validate the code works properly
+   - 
 
-5. **Database schema documentation** [ENABLE=FALSE]
+5. **Database schema documentation** [ENABLE=TRUE]
    - Document or update if required the database schema in the document number 5

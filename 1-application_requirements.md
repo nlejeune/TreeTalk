@@ -1,24 +1,21 @@
-# TreeChat Application Requirements
+# TreeTalk Application Requirements
 
 ## Executive Summary
-TreeChat is an innovative genealogical application that transforms how you explore and interact with your family history. 
-By combining the power of conversational artificial intelligence with comprehensive genealogical data management, TreeChat creates an intelligent and interactive experience that makes family research as natural as a conversation with an experienced family historian.
+TreeTalk is an innovative genealogical application that transforms how you explore and interact with your family history. 
+By combining the power of conversational artificial intelligence with comprehensive genealogical data management, TreeTalk creates an intelligent and interactive experience that makes family research as natural as a conversation with an experienced family historian.
 
 ## 1. Functional Requirements
 
 1. The application can have different data sources as inputs:
-    - Manual upload of GEDCOM files
-    - FamilySearch website API
+    - Manual upload (For the MVP, GEDCOM files only but architecture the application to support different type of format later)
+    - External aplications through API (For the MVP FamilySearch API only but architecture the application to support different type of API later)
 2. The application must leverage LLM APIs for the purpose of offering chat functionality (The MVP application will be built with Openrouter API only)
-3. The application is built in several sections:
-    Section 1: Data source management: Local data import (GEDCOM), Connectivity with external sources (he MVP application will be built with FamilySearch API only)
-    Section 2: ChatGPT-type chat window to discuss with your data
 
 ## 2. Technical Requirements
 
 1. The database will be a PostgreSQL database
 2. The programming language for the backend is Python
-3. The programming language for the frontend is JavaScript with the React framework
+3. The programming language for the frontend is Python with the streamlit framework
 4. The application will be deployed on Docker
 
 ## 3. Backlog (Epics and User Stories)
@@ -55,7 +52,7 @@ By combining the power of conversational artificial intelligence with comprehens
     - Search field with autocomplete.
     - Results listing exact and close matches.
 
-### Epic 3: Chat with Family Data (TreeChat) - Goal: Offer a natural conversation experience with family history.
+### Epic 3: Chat with Family Data (TreeTalk) - Goal: Offer a natural conversation experience with family history.
 - User story 3.1: **As a user**, I want to ask questions in natural language to explore my family tree.
 - Acceptance criteria:
     - ChatGPT-type chat interface.
@@ -71,7 +68,7 @@ By combining the power of conversational artificial intelligence with comprehens
 - Acceptance criteria:
     - Automatic suggestions displayed under each response.
 
-### Epic 4: Infrastructure and Integration - Goal: Make TreeChat extensible and compatible with LLMs.
+### Epic 4: Infrastructure and Integration - Goal: Make TreeTalk extensible and compatible with LLMs.
 - User story 4.1: **As a developer**, I want the application to expose its data so that an external LLM can connect to it.
 - Acceptance criteria:
     - Documented REST/WS endpoints.

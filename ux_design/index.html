@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TreeTalk - Converse with Your Family History</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <header class="main-header">
+        <div class="header-content">
+            <h1 class="app-title">TreeTalk</h1>
+            <nav class="main-nav">
+                <button class="nav-btn active" data-tab="exploration">Data Exploration</button>
+                <button class="nav-btn" data-tab="configuration">Configuration</button>
+                <button class="nav-btn" data-tab="gedcom">GEDCOM Management</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <!-- Data Exploration Tab -->
+        <div id="exploration" class="tab-content active">
+            <div class="gedcom-selector">
+                <label for="gedcom-select">Select GEDCOM File:</label>
+                <select id="gedcom-select">
+                    <option value="">-- Select a GEDCOM file --</option>
+                    <option value="sample1">Sample Family Tree.ged</option>
+                    <option value="sample2">Johnson Family.ged</option>
+                </select>
+            </div>
+
+            <div class="content-grid">
+                <div class="left-panel">
+                    <section class="family-members-section">
+                        <h2>Family Members</h2>
+                        <div class="search-container">
+                            <input type="text" id="person-search" placeholder="Search by name..." />
+                            <button class="search-btn">🔍</button>
+                        </div>
+                        <div class="family-list">
+                            <div class="person-item" data-person="john-smith">
+                                <span class="person-name">John Smith</span>
+                                <span class="person-dates">(1850-1920)</span>
+                            </div>
+                            <div class="person-item" data-person="mary-smith">
+                                <span class="person-name">Mary Smith</span>
+                                <span class="person-dates">(1855-1925)</span>
+                            </div>
+                            <div class="person-item" data-person="robert-smith">
+                                <span class="person-name">Robert Smith</span>
+                                <span class="person-dates">(1875-1950)</span>
+                            </div>
+                            <div class="person-item" data-person="elizabeth-jones">
+                                <span class="person-name">Elizabeth Jones</span>
+                                <span class="person-dates">(1820-1890)</span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="center-panel">
+                    <section class="family-tree-section">
+                        <h2>Family Tree Visualization</h2>
+                        <div class="tree-controls">
+                            <button class="zoom-in">🔍+</button>
+                            <button class="zoom-out">🔍-</button>
+                            <button class="center-view">⌂</button>
+                        </div>
+                        <div id="family-tree-container">
+                            <svg id="family-tree-svg">
+                                <!-- Family tree visualization will be rendered here -->
+                            </svg>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="bottom-panel">
+                <section class="chat-section">
+                    <h2>Chat with Your Family History</h2>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="message system-message">
+                                <p>Welcome to TreeTalk! Ask me anything about your family history. For example: "Tell me about John Smith" or "Who are Mary's children?"</p>
+                            </div>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" id="chat-input" placeholder="Ask about your family history..." />
+                            <button id="send-message">Send</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div id="configuration" class="tab-content">
+            <div class="config-container">
+                <h2>API Configuration</h2>
+                <section class="api-config">
+                    <h3>OpenRouter API Settings</h3>
+                    <div class="form-group">
+                        <label for="openrouter-key">OpenRouter API Key:</label>
+                        <input type="password" id="openrouter-key" placeholder="Enter your OpenRouter API key" />
+                        <button class="toggle-visibility" data-target="openrouter-key">👁️</button>
+                    </div>
+                    <div class="form-group">
+                        <label for="openrouter-model">Preferred Model:</label>
+                        <select id="openrouter-model">
+                            <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B (Free)</option>
+                            <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                        </select>
+                    </div>
+                    <button class="save-config">Save Configuration</button>
+                </section>
+
+                <section class="api-config">
+                    <h3>FamilySearch API Settings (Optional)</h3>
+                    <div class="form-group">
+                        <label for="familysearch-key">FamilySearch Client ID:</label>
+                        <input type="text" id="familysearch-key" placeholder="Enter your FamilySearch client ID" />
+                    </div>
+                    <button class="save-config">Save Configuration</button>
+                </section>
+
+                <section class="config-status">
+                    <h3>Configuration Status</h3>
+                    <div class="status-item">
+                        <span class="status-label">OpenRouter API:</span>
+                        <span class="status-indicator not-configured">Not Configured</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">FamilySearch API:</span>
+                        <span class="status-indicator not-configured">Not Configured</span>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- GEDCOM Management Tab -->
+        <div id="gedcom" class="tab-content">
+            <div class="gedcom-container">
+                <h2>GEDCOM File Management</h2>
+                
+                <section class="upload-section">
+                    <h3>Upload GEDCOM File</h3>
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-content">
+                            <div class="upload-icon">📁</div>
+                            <p>Drag and drop your GEDCOM file here, or click to browse</p>
+                            <input type="file" id="file-input" accept=".ged,.gedcom" />
+                            <button class="browse-btn">Browse Files</button>
+                        </div>
+                    </div>
+                    <div class="upload-progress" id="upload-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <span class="progress-text" id="progress-text">0%</span>
+                    </div>
+                </section>
+
+                <section class="files-section">
+                    <h3>Uploaded GEDCOM Files</h3>
+                    <div class="files-list">
+                        <div class="file-item">
+                            <div class="file-info">
+                                <span class="file-name">Sample Family Tree.ged</span>
+                                <span class="file-size">2.3 MB</span>
+                                <span class="file-date">Uploaded: 2024-01-15</span>
+                                <span class="file-status status-success">✓ Processed</span>
+                            </div>
+                            <div class="file-actions">
+                                <button class="view-btn">View Details</button>
+                                <button class="delete-btn">Delete</button>
+                            </div>
+                        </div>
+                        
+                        <div class="file-item">
+                            <div class="file-info">
+                                <span class="file-name">Johnson Family.ged</span>
+                                <span class="file-size">1.8 MB</span>
+                                <span class="file-date">Uploaded: 2024-01-10</span>
+                                <span class="file-status status-success">✓ Processed</span>
+                            </div>
+                            <div class="file-actions">
+                                <button class="view-btn">View Details</button>
+                                <button class="delete-btn">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="import-status">
+                    <h3>Import Status</h3>
+                    <div class="status-log">
+                        <div class="log-entry">
+                            <span class="log-timestamp">2024-01-15 14:30:22</span>
+                            <span class="log-message">Sample Family Tree.ged: Successfully imported 847 persons and 1,203 relationships</span>
+                            <span class="log-status success">Success</span>
+                        </div>
+                        <div class="log-entry">
+                            <span class="log-timestamp">2024-01-10 09:15:45</span>
+                            <span class="log-message">Johnson Family.ged: Successfully imported 623 persons and 892 relationships</span>
+                            <span class="log-status success">Success</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -6,7 +6,8 @@
       "Bash(docker-compose:*)",
       "Bash(curl:*)",
       "Bash(dir:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(copy \".env.example\" \".env\")"
     ],
     "deny": [],
     "ask": []

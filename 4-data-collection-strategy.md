@@ -1,0 +1,4 @@
+- Use the .ged file in the Gedcom folder as test data.
+- When the user importe a .ged file through the UI, parse the file and store the information in a postgresql database.
+- All the application is using the sql data as the source, gedcom is only used as an initial input.
+- The SQL data model has to be designed to enable multiple gedcom import in the same database

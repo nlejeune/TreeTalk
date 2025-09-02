@@ -1,8 +1,8 @@
-# High-Level Architecture - TreeChat MVP
+# High-Level Architecture - TreeTalk MVP
 
 ## Overview
 
-TreeChat is an innovative genealogical application that enables natural language interaction with family history data. This MVP architecture follows a simplified three-tier approach focusing on core functionality: GEDCOM import, family tree visualization, and chat-based exploration using OpenRouter API.
+TreeTalk is an innovative genealogical application that enables natural language interaction with family history data. This MVP architecture follows a simplified three-tier approach focusing on core functionality: GEDCOM import, family tree visualization, and chat-based exploration using OpenRouter API.
 
 ## Architecture Principles
 
@@ -17,7 +17,7 @@ TreeChat is an innovative genealogical application that enables natural language
 ```mermaid
 graph TB
     subgraph "Client Layer"
-        WEB[React Frontend<br/>Family Tree + Chat UI]
+        WEB[Streamlit Frontend<br/>Family Tree + Chat UI]
     end
     
     subgraph "Application Layer"
@@ -66,36 +66,41 @@ graph TB
 
 ## Core Components
 
-### 1. React Frontend
+### 1. Streamlit Frontend
 **Purpose**: User interface for data management and conversational interaction
 
 **Features**:
-- Interactive family tree visualization with D3.js
+- Interactive family tree visualization with Streamlit components
 - GEDCOM file upload with progress tracking
 - Real-time chat interface with conversation history
 - Person search with autocomplete and filtering
 - Data source management dashboard
+- Tabbed interface for different sections
 
 **Technology Stack**:
-- React 18+ with functional components and hooks
-- D3.js for family tree visualization
-- Axios for API communication
-- WebSocket for real-time chat
+- Python 3.11+ with Streamlit framework
+- Streamlit-agraph or Pyvis for family tree visualization
+- Requests for API communication
+- Streamlit session state for chat history
 
 **Key Components**:
 ```
 src/
+├── main.py                # Main Streamlit app
+├── pages/
+│   ├── data_exploration.py    # Main family tree page
+│   ├── configuration.py       # API keys configuration
+│   └── gedcom_management.py   # GEDCOM file management
 ├── components/
-│   ├── FamilyTree.js       # D3.js tree visualization
-│   ├── Chat.js             # Chat interface
-│   ├── PersonSearch.js     # Search functionality
-│   ├── DataManagement.js   # GEDCOM upload & sources
-│   └── PersonDetails.js    # Individual person view
+│   ├── family_tree.py         # Tree visualization component
+│   ├── chat_interface.py      # Chat component
+│   ├── person_search.py       # Search functionality
+│   └── file_uploader.py       # GEDCOM upload component
 ├── services/
-│   ├── api.js             # Backend API calls
-│   └── websocket.js       # Chat WebSocket
+│   ├── api_client.py          # Backend API calls
+│   └── config_manager.py      # Configuration handling
 └── utils/
-    └── treeLayout.js      # Tree visualization helpers
+    └── tree_layout.py         # Tree visualization helpers
 ```
 
 ### 2. FastAPI Backend
@@ -330,25 +335,25 @@ graph TB
 
 ### Container Specifications
 
-**Frontend Container (treechat-frontend)**:
-- Base: node:18-alpine for build, nginx:alpine for serving
-- Build React application
-- Serve static files via Nginx
+**Frontend Container (treetalk-frontend)**:
+- Base: python:3.11-slim
+- Install Streamlit and dependencies
+- Run Streamlit application
 - Environment-specific configuration
 
-**Backend Container (treechat-backend)**:
+**Backend Container (treetalk-backend)**:
 - Base: python:3.11-slim
 - FastAPI with uvicorn server
 - Background task processing with Celery
 - Environment variables for configuration
 
-**Database Container (treechat-db)**:
+**Database Container (treetalk-db)**:
 - Base: postgres:15
 - Persistent volume for data
 - Initialization scripts for schema
 - Backup and restore capabilities
 
-**Cache Container (treechat-cache)**:
+**Cache Container (treetalk-cache)**:
 - Base: redis:7-alpine
 - Session storage and search caching
 - Persistent volume for durability
@@ -360,14 +365,16 @@ version: '3.8'
 services:
   frontend:
     build: ./frontend
-    ports: ["3000:80"]
+    ports: ["8501:8501"]
     depends_on: [backend]
+    environment:
+      - BACKEND_URL=http://backend:8000
     
   backend:
     build: ./backend
     ports: ["8000:8000"]
     environment:
-      - DATABASE_URL=postgresql://user:pass@db:5432/treechat
+      - DATABASE_URL=postgresql://user:pass@db:5432/treetalk
       - REDIS_URL=redis://cache:6379/0
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - FAMILYSEARCH_CLIENT_ID=${FAMILYSEARCH_CLIENT_ID}
@@ -376,8 +383,8 @@ services:
   db:
     image: postgres:15
     environment:
-      - POSTGRES_DB=treechat
-      - POSTGRES_USER=treechat
+      - POSTGRES_DB=treetalk
+      - POSTGRES_USER=treetalk
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes: ["./data/postgres:/var/lib/postgresql/data"]
     
@@ -467,7 +474,7 @@ def build_family_context(person: Person, family_members: list[Person]) -> str:
 1. **Enhanced Chat**: Better context management, conversation memory
 2. **Advanced Visualization**: Timeline views, geographic mapping
 3. **Collaboration**: Multi-user family trees, sharing capabilities
-4. **Mobile Support**: Progressive Web App implementation
+4. **Mobile Support**: Responsive Streamlit interface
 5. **External Integrations**: Additional genealogy service APIs
 
-This MVP architecture provides a solid foundation for TreeChat while maintaining simplicity and focus on core user value.
+This MVP architecture provides a solid foundation for TreeTalk while maintaining simplicity and focus on core user value with Python/Streamlit frontend technology.

@@ -1,16 +1,17 @@
 # TreeChat Application Requirements
 
 ## Executive Summary
-TreeChat is an innovative genealogical server based on the MCP (Model Context Protocol) that transforms how you explore and interact with your family history. By combining the power of conversational artificial intelligence with comprehensive genealogical data management, TreeChat creates an intelligent and interactive experience that makes family research as natural as a conversation with an experienced family historian.
+TreeChat is an innovative genealogical application that transforms how you explore and interact with your family history. 
+By combining the power of conversational artificial intelligence with comprehensive genealogical data management, TreeChat creates an intelligent and interactive experience that makes family research as natural as a conversation with an experienced family historian.
 
 ## 1. Functional Requirements
 
 1. The application can have different data sources as inputs:
     - Manual upload of GEDCOM files
     - FamilySearch website API
-2. The application must have an internal MCP server to expose its information to external LLMs for the purpose of offering chat functionality
+2. The application must leverage LLM APIs for the purpose of offering chat functionality (The MVP application will be built with Openrouter API only)
 3. The application is built in several sections:
-    Section 1: Data source management: Local data import (GEDCOM), Connectivity with external sources (example: FamilySearch API)
+    Section 1: Data source management: Local data import (GEDCOM), Connectivity with external sources (he MVP application will be built with FamilySearch API only)
     Section 2: ChatGPT-type chat window to discuss with your data
 
 ## 2. Technical Requirements
@@ -62,7 +63,7 @@ TreeChat is an innovative genealogical server based on the MCP (Model Context Pr
 
 - User story 3.2: **As a user**, I want the chatbot responses to be based only on my imported family data.
 - Acceptance criteria:
-    - The internal MCP transmits only relevant data to the LLM.
+    - The backend transmits only relevant data to the LLM.
     - Responses cite sources (GEDCOM, FamilySearch).
     - Guided exploration
 
@@ -70,8 +71,8 @@ TreeChat is an innovative genealogical server based on the MCP (Model Context Pr
 - Acceptance criteria:
     - Automatic suggestions displayed under each response.
 
-### Epic 4: Infrastructure and MCP Integration - Goal: Make TreeChat extensible and compatible with other LLMs.
-- User story 4.1: **As a developer**, I want the application to expose its data via an internal MCP server so that an external LLM can connect to it.
+### Epic 4: Infrastructure and Integration - Goal: Make TreeChat extensible and compatible with LLMs.
+- User story 4.1: **As a developer**, I want the application to expose its data so that an external LLM can connect to it.
 - Acceptance criteria:
     - Documented REST/WS endpoints.
     - Secure authentication.

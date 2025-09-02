@@ -38,4 +38,7 @@ Follow this structured approach to analyze and document the project :
 4. **Database schema documentation** [ENABLE=FALSE]
    - Document the database schema in the document number 4
 
+5. **Code generation** [ENABLE=FALSE]
+   - If the folder src exist, use it as your code base and adjust
+   - If the folder src does not exist, create it and build the first version of the application in it
 

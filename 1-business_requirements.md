@@ -1,90 +1,88 @@
-# Requis de l'application TreeChat
+# TreeChat Application Requirements
 
+## Executive Summary
+TreeChat is an innovative genealogical server based on the MCP (Model Context Protocol) that transforms how you explore and interact with your family history. By combining the power of conversational artificial intelligence with comprehensive genealogical data management, TreeChat creates an intelligent and interactive experience that makes family research as natural as a conversation with an experienced family historian.
 
-## Sommaire executif
-TreeChat est un serveur généalogique innovant basé sur le protocole MCP (Model Context Protocol) qui transforme la façon dont vous explorez et interagissez avec votre histoire familiale. 
-En combinant la puissance de l’intelligence artificielle conversationnelle avec une gestion complète des données généalogiques, TreeChat crée une expérience intelligente et interactive qui rend la recherche familiale aussi naturelle qu’une conversation avec un historien familial expérimenté.
+## 1. Functional Requirements
 
-## 1. Requis fonctionnels
+1. The application can have different data sources as inputs:
+    - Manual upload of GEDCOM files
+    - FamilySearch website API
+2. The application must have an internal MCP server to expose its information to external LLMs for the purpose of offering chat functionality
+3. The application is built in several sections:
+    Section 1: Data source management: Local data import (GEDCOM), Connectivity with external sources (example: FamilySearch API)
+    Section 2: ChatGPT-type chat window to discuss with your data
 
-1. L'application pourra avoir pour source de données différents intrants :
-    - Upload manuel de fichier GEDCOM
-    - API du site FamilySearch
-2. L'application doit avoir un serveur MCP interne pour exposer ses informations à des LLM externes dans le but d'offrir une fonctionnalité de chat
-3. L'application est bâtie en plusieurs sections :
-    Section 1 : Gestion des sources de données : Import local de données (GEDCOM), Connectivité avec des sources externes (exemple : API FamilySearch)
-    Section 2 : Fenêtre de chat type ChatGPT pour discuter avec ses données
+## 2. Technical Requirements
 
-## 2. Requis techniques
+1. The database will be a PostgreSQL database
+2. The programming language for the backend is Python
+3. The programming language for the frontend is JavaScript with the React framework
+4. The application will be deployed on Docker
 
-1. La base de donnée sera une base de donnée Postgresql
-2. Le language de programmation pour le backend est python
-3. Le language de programmation pour le frontend est Javascript avec le framework React
-4. L'application sera déployée sur docker
+## 3. Backlog (Epics and User Stories)
 
-## 3. Backlog (Epic et user stories)
+### Epic 1: Data Source Management - Goal: Allow users to load and connect their genealogical data.
+- User story 1.1: **As a user**, I want to be able to upload a GEDCOM file to import my family tree into the application.
+- Acceptance criteria:
+    - Upload accepts only .ged formats.
+    - User is notified in case of success or failure.
+    - Data is stored in Postgres database.
+    - Connection to FamilySearch
 
-### Épique 1 : Gestion des sources de données - But : Permettre à l’utilisateur de charger et connecter ses données généalogiques.
-- User story 1.1 : **En tant qu’utilisateur**, je veux pouvoir uploader un fichier GEDCOM afin d’importer mon arbre généalogique dans l’application.
-- Critères d’acceptation :
-    - L’upload accepte uniquement les formats .ged.
-    - L’utilisateur est notifié en cas de succès ou d’échec.
-    - Les données sont stockées en base Postgres.
-    - Connexion à FamilySearch
+- User story 1.2: **As a user**, I want to connect my FamilySearch account via their API to synchronize my family data.
+- Acceptance criteria:
+    - Secure OAuth authentication.
+    - Initial data synchronization.
+    - Ability to launch manual resynchronization.
 
-- User story 1.2 : **En tant qu’utilisateur**, je veux connecter mon compte FamilySearch via leur API pour synchroniser mes données familiales.
-- Critères d’acceptation :
-    - Authentification OAuth sécurisée.
-    - Synchronisation initiale des données.
-    - Possibilité de lancer une resynchronisation manuelle.
+- User story 1.3: **As a user**, I want to see and manage all my data sources (imported GEDCOM, connected APIs) from a single interface.
+- Acceptance criteria:
+    - Dashboard listing sources.
+    - Ability to delete a source.
+    - Visible synchronization status (last update date, success/error).
 
-- User story 1.3 : **En tant qu’utilisateur**, je veux voir et gérer toutes mes sources de données (GEDCOM importés, API connectées) depuis une interface unique.
-- Critères d’acceptation :
-    - Tableau de bord listant les sources.
-    - Possibilité de supprimer une source.
-    - Statut de synchronisation visible (date du dernier update, succès/erreur).
+### Epic 2: Family Data Exploration - Goal: Allow intuitive navigation in the family tree.
+- User story 2.1: **As a user**, I want to navigate my family tree to explore my ancestors and descendants.
+- Acceptance criteria:
+    - Interactive graphical display (zoom, movement).
+    - Each person clickable with detailed profile.
+    - Person search
 
-### Épique 2 : Exploration des données familiales - But : Permettre une navigation intuitive dans l’arbre généalogique.
-- User story 2.1 : **En tant qu’utilisateur**, je veux naviguer dans mon arbre familial pour explorer mes ancêtres et descendants.
-- Critères d’acceptation :
-    - Affichage graphique interactif (zoom, déplacement).
-    - Chaque personne cliquable avec fiche détaillée.
-    - Recherche de personnes
+- User story 2.2: **As a user**, I want to search for an ancestor by name to find them quickly.
+- Acceptance criteria:
+    - Search field with autocomplete.
+    - Results listing exact and close matches.
 
-- User story 2.1 : **En tant qu’utilisateur**, je veux chercher un ancêtre par nom afin de le retrouver rapidement.
-- Critères d’acceptation :
-    - Champ de recherche avec autocomplétion.
-    - Résultats listant les correspondances exactes et proches.
+### Epic 3: Chat with Family Data (TreeChat) - Goal: Offer a natural conversation experience with family history.
+- User story 3.1: **As a user**, I want to ask questions in natural language to explore my family tree.
+- Acceptance criteria:
+    - ChatGPT-type chat interface.
+    - Conversation history preserved.
 
-### Épique 3 : Chat avec ses données familiales (TreeChat) - But : Offrir une expérience de conversation naturelle avec l’histoire familiale.
-- User story 3.1 : **En tant qu’utilisateur**, je veux poser des questions en langage naturel pour explorer mon arbre généalogique.
-- Critères d’acceptation :
-    - Interface de chat type ChatGPT.
-    - Historique des conversations conservé.
+- User story 3.2: **As a user**, I want the chatbot responses to be based only on my imported family data.
+- Acceptance criteria:
+    - The internal MCP transmits only relevant data to the LLM.
+    - Responses cite sources (GEDCOM, FamilySearch).
+    - Guided exploration
 
-- User story 3.2 : **En tant qu’utilisateur**, je veux que les réponses du chatbot soient basées uniquement sur mes données familiales importées.
-- Critères d’acceptation :
-    - Le MCP interne transmet uniquement les données pertinentes au LLM.
-    - Les réponses citent les sources (GEDCOM, FamilySearch).
-    - Exploration guidée
+- User story 3.3: **As a user**, I want the chatbot to suggest related questions (e.g., "Would you like to know more about Jean Dupont's descendants?").
+- Acceptance criteria:
+    - Automatic suggestions displayed under each response.
 
-- User story 3.3 : **En tant qu’utilisateur**, je veux que le chatbot me propose des questions connexes (ex. "Voulez-vous en savoir plus sur les descendants de Jean Dupont ?").
-- Critères d’acceptation :
-    - Suggestions automatiques affichées sous chaque réponse.
+### Epic 4: Infrastructure and MCP Integration - Goal: Make TreeChat extensible and compatible with other LLMs.
+- User story 4.1: **As a developer**, I want the application to expose its data via an internal MCP server so that an external LLM can connect to it.
+- Acceptance criteria:
+    - Documented REST/WS endpoints.
+    - Secure authentication.
 
-### Épique 4 : Infrastructure et intégration MCP - But : Rendre TreeChat extensible et compatible avec d’autres LLM.
-- User story 4.1 : **En tant que développeur**, je veux que l’application expose ses données via un serveur MCP interne afin qu’un LLM externe puisse s’y connecter.
-- Critères d’acceptation :
-    - Endpoints REST/WS documentés.
-    - Authentification sécurisée.
+- User story 4.2: **As an administrator**, I want the application to be deployable with Docker to simplify installation and portability.
+- Acceptance criteria:
+    - Dockerfile for backend and frontend.
+    - docker-compose.yaml to orchestrate Postgres, backend, frontend.
+    - PostgreSQL database
 
-- User story 4.2 : **En tant qu’administrateur**, je veux que l’application soit déployable avec Docker pour simplifier l’installation et la portabilité.
-- Critères d’acceptation :
-    - Dockerfile pour backend et frontend.
-    - docker-compose.yaml pour orchestrer Postgres, backend, frontend.
-    - Base de données PostgreSQL
-
-- User story 4.3 : **En tant que développeur**, je veux stocker toutes les données généalogiques dans PostgreSQL afin d’avoir une base robuste et relationnelle.
-- Critères d’acceptation :
-    - Schéma documenté (personnes, relations, sources).
-    - Scripts de migration inclus.
+- User story 4.3: **As a developer**, I want to store all genealogical data in PostgreSQL to have a robust and relational database.
+- Acceptance criteria:
+    - Documented schema (persons, relationships, sources).
+    - Migration scripts included.

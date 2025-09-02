@@ -2,7 +2,8 @@
 
 ## Summary
 TreeChat - Converse with Your Family History
-TreeChat is an innovative genealogy MCP (Model Context Protocol) server that transforms how you explore and interact with your family history. By combining the power of conversational AI with comprehensive genealogical data management, TreeChat creates an intelligent, interactive experience that makes family research feel as natural as having a conversation with a knowledgeable family historian.
+TreeChat is an innovative genealogy application that transforms how you explore and interact with your family history. 
+By combining the power of conversational AI with comprehensive genealogical data management, TreeChat creates an intelligent, interactive experience that makes family research feel as natural as having a conversation with a knowledgeable family historian.
 
 ## Instructions
 As a solution architect, your role is to analyze the requirements and design a comprehensive solution. Follow these guidelines :
@@ -28,4 +29,13 @@ Follow this structured approach to analyze and document the project :
    - Documentation should be written in the document number 1
   
 2. **High level architecture** [ENABLE=TRUE]
-   - Define target high level architecture in the document number 2
+   - Define target high level architecture in the document number 2 (replace the existing one)
+
+3. **Visual prototype** [ENABLE=FALSE]
+   - A demo has been build in the Demo folder, the visual of the application is your template for the real application
+   - Take into account only the frontend part, the overall architecture of the demo is not the right one
+
+4. **Database schema documentation** [ENABLE=FALSE]
+   - Document the database schema in the document number 4
+
+

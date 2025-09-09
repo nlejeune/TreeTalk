@@ -60,8 +60,8 @@ class FamilyService:
             Dict[str, Any]: Family tree data with persons and relationships
         """
         try:
-            # Get focal person
-            focal_person = await self._get_person_by_id(focal_person_id, source_id)
+            # Get focal person with events and places
+            focal_person = await self._get_person_by_id_with_events(focal_person_id, source_id)
             if not focal_person:
                 raise ValueError(f"Person not found: {focal_person_id}")
             
@@ -76,14 +76,64 @@ class FamilyService:
                 person_ids, source_id
             )
             
-            # Format data for visualization
+            # Format data for visualization with enhanced person details
+            enhanced_persons = []
+            for person in related_persons:
+                person_dict = person.to_dict()
+                # Add birth and death places from events
+                if person.events:
+                    for event in person.events:
+                        if event.event_type.lower() in ['birth', 'born']:
+                            if event.place:
+                                person_dict["birth_place"] = event.place.get_display_name()
+                            elif event.place_text:
+                                person_dict["birth_place"] = event.place_text
+                        elif event.event_type.lower() in ['death', 'died', 'burial', 'buried']:
+                            if event.place:
+                                person_dict["death_place"] = event.place.get_display_name()
+                            elif event.place_text:
+                                person_dict["death_place"] = event.place_text
+                enhanced_persons.append(person_dict)
+            
+            # Enhanced relationships with person names for better context
+            enhanced_relationships = []
+            for rel in relationships:
+                rel_dict = rel.to_dict()
+                # Find person names from the enhanced_persons list
+                person1_name = "Unknown"
+                person2_name = "Unknown"
+                for person in enhanced_persons:
+                    if person["id"] == rel_dict["person1_id"]:
+                        person1_name = person["full_name"]
+                    elif person["id"] == rel_dict["person2_id"]:
+                        person2_name = person["full_name"]
+                
+                rel_dict["person1_name"] = person1_name
+                rel_dict["person2_name"] = person2_name
+                enhanced_relationships.append(rel_dict)
+            
+            # Enhance focal person with birth/death places
+            focal_person_dict = focal_person.to_dict()
+            if focal_person.events:
+                for event in focal_person.events:
+                    if event.event_type.lower() in ['birth', 'born']:
+                        if event.place:
+                            focal_person_dict["birth_place"] = event.place.get_display_name()
+                        elif event.place_text:
+                            focal_person_dict["birth_place"] = event.place_text
+                    elif event.event_type.lower() in ['death', 'died', 'burial', 'buried']:
+                        if event.place:
+                            focal_person_dict["death_place"] = event.place.get_display_name()
+                        elif event.place_text:
+                            focal_person_dict["death_place"] = event.place_text
+            
             tree_data = {
-                "focal_person": focal_person.to_dict(),
-                "persons": [p.to_dict() for p in related_persons],
-                "relationships": [r.to_dict() for r in relationships],
+                "focal_person": focal_person_dict,
+                "persons": enhanced_persons,
+                "relationships": enhanced_relationships,
                 "metadata": {
-                    "total_persons": len(related_persons),
-                    "total_relationships": len(relationships),
+                    "total_persons": len(enhanced_persons),
+                    "total_relationships": len(enhanced_relationships),
                     "max_generations": max_generations,
                     "source_id": str(source_id) if source_id else None
                 }
@@ -175,7 +225,7 @@ class FamilyService:
             query = select(Person).where(Person.id == person_id)
             
             if include_events:
-                query = query.options(selectinload(Person.events))
+                query = query.options(selectinload(Person.events).selectinload(Event.place))
             
             result = await self.db.execute(query)
             person = result.scalar_one_or_none()
@@ -185,9 +235,42 @@ class FamilyService:
             
             person_data = person.to_dict()
             
-            # Add events if requested
+            # Add events if requested with enhanced place information
             if include_events and person.events:
-                person_data["events"] = [event.to_dict() for event in person.events]
+                enhanced_events = []
+                birth_place = None
+                death_place = None
+                
+                for event in person.events:
+                    event_dict = event.to_dict()
+                    
+                    # Add place display name if place exists
+                    if event.place:
+                        event_dict["place"] = event.place.get_display_name()
+                        event_dict["place_details"] = event.place.to_dict()
+                    elif event.place_text:
+                        event_dict["place"] = event.place_text
+                    
+                    # Extract birth and death places for person summary
+                    if event.event_type.lower() in ['birth', 'born']:
+                        if event.place:
+                            birth_place = event.place.get_display_name()
+                        elif event.place_text:
+                            birth_place = event.place_text
+                    elif event.event_type.lower() in ['death', 'died', 'burial', 'buried']:
+                        if event.place:
+                            death_place = event.place.get_display_name()
+                        elif event.place_text:
+                            death_place = event.place_text
+                    
+                    enhanced_events.append(event_dict)
+                
+                person_data["events"] = enhanced_events
+                # Add place information to person summary
+                if birth_place:
+                    person_data["birth_place"] = birth_place
+                if death_place:
+                    person_data["death_place"] = death_place
             
             # Add relationships if requested
             if include_relationships:
@@ -282,6 +365,19 @@ class FamilyService:
         )
         return result.scalar_one_or_none()
     
+    async def _get_person_by_id_with_events(self, person_id: UUID, source_id: Optional[UUID] = None) -> Optional[Person]:
+        """Get person by ID with events and places eagerly loaded."""
+        conditions = [Person.id == person_id]
+        if source_id:
+            conditions.append(Person.source_id == source_id)
+        
+        result = await self.db.execute(
+            select(Person)
+            .where(and_(*conditions))
+            .options(selectinload(Person.events).selectinload(Event.place))
+        )
+        return result.scalar_one_or_none()
+    
     async def _get_related_persons(self, focal_person_id: UUID, max_generations: int, 
                                  source_id: Optional[UUID] = None) -> List[Person]:
         """Get all persons related to focal person within generation limit."""
@@ -293,13 +389,15 @@ class FamilyService:
             if not current_generation:
                 break
                 
-            # Get persons for current generation
+            # Get persons for current generation with events and places
             conditions = [Person.id.in_(current_generation)]
             if source_id:
                 conditions.append(Person.source_id == source_id)
             
             result = await self.db.execute(
-                select(Person).where(and_(*conditions))
+                select(Person)
+                .where(and_(*conditions))
+                .options(selectinload(Person.events).selectinload(Event.place))
             )
             generation_persons = result.scalars().all()
             
@@ -371,7 +469,7 @@ class FamilyService:
         return result.scalars().all()
     
     async def _get_person_relationships(self, person_id: UUID) -> List[Dict[str, Any]]:
-        """Get all relationships for a specific person."""
+        """Get all relationships for a specific person with enhanced details."""
         result = await self.db.execute(
             select(Relationship)
             .where(
@@ -381,8 +479,9 @@ class FamilyService:
                 )
             )
             .options(
-                joinedload(Relationship.person1),
-                joinedload(Relationship.person2)
+                joinedload(Relationship.person1).selectinload(Person.events).selectinload(Event.place),
+                joinedload(Relationship.person2).selectinload(Person.events).selectinload(Event.place),
+                joinedload(Relationship.marriage_place)
             )
         )
         
@@ -392,10 +491,37 @@ class FamilyService:
         for rel in relationships:
             rel_dict = rel.to_dict()
             rel_dict["description"] = rel.get_relationship_description(person_id)
-            rel_dict["other_person"] = (
-                rel.person2.to_dict() if str(rel.person1_id) == str(person_id) 
-                else rel.person1.to_dict()
+            
+            # Get the other person in the relationship
+            other_person = (
+                rel.person2 if str(rel.person1_id) == str(person_id) 
+                else rel.person1
             )
+            
+            # Get enhanced person details including places
+            other_person_dict = other_person.to_dict()
+            
+            # Add birth and death places from events
+            if other_person.events:
+                for event in other_person.events:
+                    if event.event_type.lower() in ['birth', 'born']:
+                        if event.place:
+                            other_person_dict["birth_place"] = event.place.get_display_name()
+                        elif event.place_text:
+                            other_person_dict["birth_place"] = event.place_text
+                    elif event.event_type.lower() in ['death', 'died', 'burial', 'buried']:
+                        if event.place:
+                            other_person_dict["death_place"] = event.place.get_display_name()
+                        elif event.place_text:
+                            other_person_dict["death_place"] = event.place_text
+            
+            rel_dict["other_person"] = other_person_dict
+            rel_dict["related_person_name"] = other_person_dict.get("full_name", "Unknown")
+            
+            # Add marriage place if applicable
+            if rel.marriage_place:
+                rel_dict["marriage_place"] = rel.marriage_place.get_display_name()
+            
             relationship_data.append(rel_dict)
         
         return relationship_data

@@ -573,55 +573,195 @@ class ChatService:
                 
                 # Add birth/death details if available
                 if person.get('birth_date'):
-                    base_prompt += f"Birth: {person.get('birth_date')} {person.get('birth_place', '')}\n".strip() + "\n"
+                    base_prompt += f"Birth Date: {person.get('birth_date')}\n"
+                if person.get('birth_place'):
+                    base_prompt += f"Birth Place: {person.get('birth_place')}\n"
                 if person.get('death_date'):
-                    base_prompt += f"Death: {person.get('death_date')} {person.get('death_place', '')}\n".strip() + "\n"
+                    base_prompt += f"Death Date: {person.get('death_date')}\n"
+                if person.get('death_place'):
+                    base_prompt += f"Death Place: {person.get('death_place')}\n"
+                
+                # Add additional biographical details
+                if person.get('occupation'):
+                    base_prompt += f"Occupation: {person.get('occupation')}\n"
+                if person.get('religion'):
+                    base_prompt += f"Religion: {person.get('religion')}\n"
+                if person.get('education'):
+                    base_prompt += f"Education: {person.get('education')}\n"
                 
                 # Add events
                 events = person.get('events', [])
                 if events:
-                    base_prompt += f"Events in database ({len(events)}):\n"
-                    for event in events[:5]:  # Limit to first 5 events
+                    base_prompt += f"\nLife Events ({len(events)}):\n"
+                    for event in events[:8]:  # Increased limit for events
                         event_desc = f"  - {event.get('event_type', 'Unknown')}"
                         if event.get('event_date'):
                             event_desc += f" on {event.get('event_date')}"
                         if event.get('place'):
                             event_desc += f" at {event.get('place')}"
+                        if event.get('description'):
+                            event_desc += f": {event.get('description')}"
                         base_prompt += event_desc + "\n"
                 
-                # Add relationships
+                # Enhanced relationships with detailed family structure
                 relationships = person.get('relationships', [])
                 if relationships:
-                    base_prompt += f"Relationships in database ({len(relationships)}):\n"
-                    for rel in relationships[:10]:  # Limit to first 10 relationships
-                        base_prompt += f"  - {rel.get('relationship_type', 'Unknown')}: {rel.get('related_person_name', 'Unknown person')}\n"
+                    base_prompt += f"\nFamily Relationships ({len(relationships)}):\n"
+                    
+                    # Group relationships by type for better organization
+                    parents = []
+                    children = []
+                    spouses = []
+                    siblings = []
+                    other_relations = []
+                    
+                    for rel in relationships:
+                        rel_type = rel.get('relationship_type', 'Unknown')
+                        other_person = rel.get('other_person', {})
+                        description = rel.get('description', rel_type)
+                        
+                        rel_info = {
+                            'name': other_person.get('full_name', 'Unknown'),
+                            'life_span': other_person.get('life_span', 'dates unknown'),
+                            'birth_place': other_person.get('birth_place'),
+                            'death_place': other_person.get('death_place'),
+                            'occupation': other_person.get('occupation'),
+                            'description': description,
+                            'rel': rel
+                        }
+                        
+                        if 'parent' in description.lower() or 'father' in description.lower() or 'mother' in description.lower():
+                            parents.append(rel_info)
+                        elif 'child' in description.lower() or 'son' in description.lower() or 'daughter' in description.lower():
+                            children.append(rel_info)
+                        elif 'spouse' in description.lower() or 'husband' in description.lower() or 'wife' in description.lower():
+                            spouses.append(rel_info)
+                        elif 'sibling' in description.lower() or 'brother' in description.lower() or 'sister' in description.lower():
+                            siblings.append(rel_info)
+                        else:
+                            other_relations.append(rel_info)
+                    
+                    if parents:
+                        base_prompt += "  Parents:\n"
+                        for parent in parents:
+                            parent_info = f"    - {parent['description'].title()}: {parent['name']} ({parent['life_span']})"
+                            if parent['birth_place']:
+                                parent_info += f", born in {parent['birth_place']}"
+                            if parent['occupation']:
+                                parent_info += f", {parent['occupation']}"
+                            base_prompt += parent_info + "\n"
+                    
+                    if spouses:
+                        base_prompt += "  Spouses:\n"
+                        for spouse in spouses:
+                            spouse_info = f"    - {spouse['description'].title()}: {spouse['name']} ({spouse['life_span']})"
+                            if spouse['birth_place']:
+                                spouse_info += f", born in {spouse['birth_place']}"
+                            # Add marriage details if available
+                            if spouse['rel'].get('marriage_date'):
+                                spouse_info += f", married {spouse['rel'].get('marriage_date')}"
+                                if spouse['rel'].get('marriage_place_id'):
+                                    spouse_info += f" at {spouse['rel'].get('marriage_place_id')}"
+                            base_prompt += spouse_info + "\n"
+                    
+                    if siblings:
+                        base_prompt += "  Siblings:\n"
+                        for sibling in siblings:
+                            sibling_info = f"    - {sibling['description'].title()}: {sibling['name']} ({sibling['life_span']})"
+                            if sibling['birth_place']:
+                                sibling_info += f", born in {sibling['birth_place']}"
+                            if sibling['occupation']:
+                                sibling_info += f", {sibling['occupation']}"
+                            base_prompt += sibling_info + "\n"
+                    
+                    if children:
+                        base_prompt += "  Children:\n"
+                        for child in children:
+                            child_info = f"    - {child['description'].title()}: {child['name']} ({child['life_span']})"
+                            if child['birth_place']:
+                                child_info += f", born in {child['birth_place']}"
+                            if child['occupation']:
+                                child_info += f", {child['occupation']}"
+                            base_prompt += child_info + "\n"
+                    
+                    if other_relations:
+                        base_prompt += "  Other Relations:\n"
+                        for rel in other_relations:
+                            rel_info = f"    - {rel['description'].title()}: {rel['name']} ({rel['life_span']})"
+                            if rel['birth_place']:
+                                rel_info += f", born in {rel['birth_place']}"
+                            base_prompt += rel_info + "\n"
             
             if "family_tree" in context_data:
                 tree = context_data["family_tree"]
-                base_prompt += f"\n=== FAMILY TREE CONTEXT ===\n"
+                base_prompt += f"\n=== EXTENDED FAMILY TREE CONTEXT ===\n"
                 base_prompt += f"Connected Persons: {len(tree.get('persons', []))}\n"
                 base_prompt += f"Family Relationships: {len(tree.get('relationships', []))}\n"
                 
-                # List key family members
+                # Enhanced family tree display with more details
                 persons = tree.get('persons', [])
                 if persons:
-                    base_prompt += "Family members in this context:\n"
-                    for person in persons[:8]:  # Show first 8 family members
-                        base_prompt += f"  - {person.get('display_name', 'Unknown')} ({person.get('life_span', 'dates unknown')})\n"
+                    base_prompt += "Extended Family Members:\n"
+                    for person in persons[:12]:  # Show more family members
+                        person_line = f"  - {person.get('display_name', 'Unknown')} ({person.get('life_span', 'dates unknown')})"
+                        if person.get('birth_place'):
+                            person_line += f", born in {person['birth_place']}"
+                        if person.get('occupation'):
+                            person_line += f", {person['occupation']}"
+                        base_prompt += person_line + "\n"
+                
+                # Add relationship details from family tree
+                relationships = tree.get('relationships', [])
+                if relationships:
+                    base_prompt += f"\nFamily Connections:\n"
+                    for rel in relationships[:15]:  # Show more relationships
+                        rel_line = f"  - {rel.get('relationship_type', 'Unknown')} relationship"
+                        if rel.get('person1_name') and rel.get('person2_name'):
+                            rel_line = f"  - {rel.get('person1_name')} is {rel.get('relationship_type', 'related to')} {rel.get('person2_name')}"
+                        base_prompt += rel_line + "\n"
             
             if "mentioned_persons" in context_data:
                 persons = context_data["mentioned_persons"]
-                base_prompt += f"\n=== SEARCH RESULTS ===\n"
+                base_prompt += f"\n=== DETAILED SEARCH RESULTS ===\n"
                 base_prompt += f"Persons matching search criteria: {len(persons)}\n"
                 for person in persons:
-                    base_prompt += f"  - {person.get('display_name', 'Unknown')} ({person.get('life_span', 'dates unknown')})\n"
-                    if person.get('birth_place') or person.get('death_place'):
-                        places = []
+                    base_prompt += f"\n--- {person.get('display_name', 'Unknown')} ---\n"
+                    base_prompt += f"Life Span: {person.get('life_span', 'dates unknown')}\n"
+                    
+                    # Birth information
+                    if person.get('birth_date') or person.get('birth_place'):
+                        birth_info = "Birth: "
+                        if person.get('birth_date'):
+                            birth_info += f"{person['birth_date']}"
                         if person.get('birth_place'):
-                            places.append(f"b. {person['birth_place']}")
+                            birth_info += f" in {person['birth_place']}"
+                        base_prompt += birth_info + "\n"
+                    
+                    # Death information
+                    if person.get('death_date') or person.get('death_place'):
+                        death_info = "Death: "
+                        if person.get('death_date'):
+                            death_info += f"{person['death_date']}"
                         if person.get('death_place'):
-                            places.append(f"d. {person['death_place']}")
-                        base_prompt += f"    Places: {', '.join(places)}\n"
+                            death_info += f" in {person['death_place']}"
+                        base_prompt += death_info + "\n"
+                    
+                    # Additional details
+                    if person.get('occupation'):
+                        base_prompt += f"Occupation: {person['occupation']}\n"
+                    if person.get('religion'):
+                        base_prompt += f"Religion: {person['religion']}\n"
+                    
+                    # Family relationships for mentioned persons
+                    if person.get('relationships'):
+                        base_prompt += f"Family: "
+                        family_members = []
+                        for rel in person['relationships'][:6]:  # Limit to 6 key relationships
+                            other_person = rel.get('other_person', {})
+                            if other_person.get('full_name'):
+                                family_members.append(f"{rel.get('description', 'related to')} {other_person['full_name']}")
+                        if family_members:
+                            base_prompt += ", ".join(family_members) + "\n"
         
         base_prompt += "\n**REMINDER**: This is ALL the data available. Do not add information not explicitly listed above. If asked about details not present in this data, clearly state that the information is not available in the family tree database.\n"
         

@@ -17,7 +17,8 @@
       "Bash(docker:*)",
       "Bash(streamlit run:*)",
       "Bash(powershell:*)",
-      "WebFetch(domain:python-gedcom.readthedocs.io)"
+      "WebFetch(domain:python-gedcom.readthedocs.io)",
+      "Bash(sed:*)"
     ],
     "deny": [],
     "ask": []

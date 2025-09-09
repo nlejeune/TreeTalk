@@ -1,329 +1,489 @@
 """
-Chat Service - OpenRouter API Integration
-Handles conversational queries about family history
+Chat Service - Conversational AI Integration with OpenRouter
+
+This service handles chat functionality for the TreeTalk application,
+integrating with OpenRouter API for LLM interactions while providing
+genealogical context from the database.
+
+Key Features:
+- OpenRouter API integration for multiple LLM models
+- Genealogical context preparation and injection
+- Chat session and message management
+- Response processing and citation handling
 """
 
 import httpx
 import json
-import os
-from typing import Dict, List, Optional, Any
-from sqlalchemy.orm import Session
+import logging
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+from uuid import UUID
+import asyncio
 
-from ..models.person import Person
-from ..models.relationship import Relationship
-from ..models.chat_session import ChatSession, ChatMessage
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
+from sqlalchemy.orm import selectinload
+
+from models.chat_session import ChatSession
+from models.chat_message import ChatMessage
+from models.person import Person
+from models.configuration import Configuration
+from services.family_service import FamilyService
+
+logger = logging.getLogger(__name__)
+
 
 class ChatService:
-    """Service for handling chat interactions with OpenRouter API."""
+    """
+    Service class for conversational AI functionality.
     
-    def __init__(self, db: Session):
-        self.db = db
-        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-        self.openrouter_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.default_model = "meta-llama/llama-3.1-8b-instruct:free"
+    This service handles:
+    - Chat session management
+    - OpenRouter API integration
+    - Genealogical context preparation
+    - Message history and conversation flow
+    """
     
-    async def send_chat_message(
-        self,
-        message: str,
-        session_id: str = "default",
-        person_context: Optional[str] = None,
-        model: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def __init__(self, db_session: AsyncSession):
         """
-        Send a chat message and get AI response.
+        Initialize the chat service.
         
         Args:
-            message: User message
-            session_id: Chat session identifier
-            person_context: ID of person to focus context on
-            model: OpenRouter model to use
+            db_session (AsyncSession): Database session for chat operations
+        """
+        self.db = db_session
+        self.family_service = FamilyService(db_session)
+        self.openrouter_base_url = "https://openrouter.ai/api/v1"
+        
+    async def send_message(self, session_id: UUID, message: str, 
+                          model_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Send a message to the chat session and get AI response.
+        
+        Args:
+            session_id (UUID): Chat session ID
+            message (str): User message content
+            model_name (str, optional): Override default model for this message
             
         Returns:
-            Dict with response and metadata
+            Dict[str, Any]: Chat response with message data and metadata
         """
-        if not self.openrouter_api_key:
-            return {
-                "response": "OpenRouter API key not configured. Please set your API key in the Configuration tab.",
-                "error": "api_key_missing"
-            }
-        
         try:
+            start_time = datetime.now()
+            
             # Get or create chat session
-            chat_session = await self._get_or_create_session(session_id, person_context)
+            session = await self._get_or_create_session(session_id)
             
-            # Build context from family data
-            context = await self._build_family_context(person_context, chat_session)
-            
-            # Prepare messages for API
-            messages = await self._prepare_messages(message, context, chat_session)
-            
-            # Call OpenRouter API
-            start_time = datetime.utcnow()
-            api_response = await self._call_openrouter_api(messages, model or self.default_model)
-            response_time = (datetime.utcnow() - start_time).total_seconds() * 1000
-            
-            if api_response.get("error"):
-                return {
-                    "response": f"AI service error: {api_response['error']}",
-                    "error": "api_error"
-                }
-            
-            ai_response = api_response["choices"][0]["message"]["content"]
-            
-            # Save messages to database
-            await self._save_messages(
-                chat_session.id,
-                message,
-                ai_response,
-                response_time,
-                model or self.default_model,
-                api_response.get("usage", {}).get("total_tokens", 0)
+            # Save user message
+            user_message = await self._save_message(
+                session_id=session.id,
+                message_type="user",
+                content=message,
+                sequence_number=session.message_count + 1
             )
             
-            return {
-                "response": ai_response,
-                "session_id": session_id,
-                "response_time_ms": response_time,
-                "tokens_used": api_response.get("usage", {}).get("total_tokens", 0)
+            # Prepare genealogical context
+            context_data = await self._prepare_genealogical_context(session, message)
+            
+            # Get AI response
+            ai_response, response_metadata = await self._get_ai_response(
+                session, message, context_data, model_name
+            )
+            
+            # Save AI message
+            ai_message = await self._save_message(
+                session_id=session.id,
+                message_type="assistant",
+                content=ai_response,
+                sequence_number=session.message_count + 2,
+                model_used=response_metadata.get("model_used"),
+                tokens_used=response_metadata.get("tokens_used"),
+                response_time_ms=int((datetime.now() - start_time).total_seconds() * 1000),
+                genealogy_context=context_data,
+                cited_sources=response_metadata.get("cited_sources", [])
+            )
+            
+            # Update session
+            session.message_count += 2
+            session.last_activity = datetime.utcnow()
+            await self.db.commit()
+            
+            # Prepare response
+            response_data = {
+                "session_id": str(session.id),
+                "user_message": user_message.to_dict(),
+                "ai_message": ai_message.to_dict(),
+                "context_used": bool(context_data),
+                "response_metadata": response_metadata
             }
+            
+            logger.info(f"Chat message processed for session {session_id}")
+            return response_data
             
         except Exception as e:
-            return {
-                "response": f"Sorry, I encountered an error: {str(e)}",
-                "error": "service_error"
-            }
+            logger.error(f"Failed to process chat message: {e}")
+            
+            # Save error message
+            try:
+                await self._save_error_message(
+                    session_id, f"Sorry, I encountered an error: {str(e)}"
+                )
+            except Exception:
+                pass
+            
+            raise
     
-    async def _get_or_create_session(
-        self,
-        session_id: str,
-        person_context: Optional[str] = None
-    ) -> ChatSession:
-        """Get existing chat session or create new one."""
-        session = self.db.query(ChatSession).filter(
-            ChatSession.session_id == session_id
-        ).first()
+    async def get_chat_history(self, session_id: UUID, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Get chat message history for a session.
+        
+        Args:
+            session_id (UUID): Chat session ID
+            limit (int): Maximum number of messages to return
+            
+        Returns:
+            List[Dict[str, Any]]: List of chat messages
+        """
+        try:
+            result = await self.db.execute(
+                select(ChatMessage)
+                .where(ChatMessage.session_id == session_id)
+                .order_by(desc(ChatMessage.sequence_number))
+                .limit(limit)
+            )
+            
+            messages = result.scalars().all()
+            message_data = [msg.to_dict() for msg in reversed(messages)]
+            
+            logger.info(f"Retrieved {len(message_data)} messages for session {session_id}")
+            return message_data
+            
+        except Exception as e:
+            logger.error(f"Failed to get chat history for {session_id}: {e}")
+            raise
+    
+    async def create_chat_session(self, title: Optional[str] = None,
+                                focused_person_id: Optional[UUID] = None,
+                                active_source_id: Optional[UUID] = None,
+                                model_name: Optional[str] = None) -> ChatSession:
+        """
+        Create a new chat session.
+        
+        Args:
+            title (str, optional): Session title
+            focused_person_id (UUID, optional): Person to focus chat on
+            active_source_id (UUID, optional): Active data source
+            model_name (str, optional): AI model to use
+            
+        Returns:
+            ChatSession: Created chat session
+        """
+        try:
+            # Get default model if not specified
+            if not model_name:
+                model_name = await self._get_default_model()
+            
+            # Create session
+            session = ChatSession(
+                title=title or f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                focused_person_id=focused_person_id,
+                active_source_id=active_source_id,
+                model_name=model_name,
+                system_prompt=self._get_system_prompt()
+            )
+            
+            self.db.add(session)
+            await self.db.commit()
+            await self.db.refresh(session)
+            
+            logger.info(f"Created chat session: {session.id}")
+            return session
+            
+        except Exception as e:
+            logger.error(f"Failed to create chat session: {e}")
+            raise
+    
+    async def get_available_models(self) -> List[Dict[str, Any]]:
+        """
+        Get list of available AI models from OpenRouter.
+        
+        Returns:
+            List[Dict[str, Any]]: List of available models with metadata
+        """
+        try:
+            api_key = await self._get_openrouter_api_key()
+            if not api_key:
+                return []
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": "https://treetalk.ai",
+                "X-Title": "TreeTalk"
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.openrouter_base_url}/models",
+                    headers=headers,
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                
+                models_data = response.json()
+                
+                # Filter and sort models
+                filtered_models = []
+                for model in models_data.get("data", []):
+                    model_info = {
+                        "id": model.get("id"),
+                        "name": model.get("name", model.get("id")),
+                        "pricing": model.get("pricing", {}),
+                        "context_length": model.get("context_length", 0),
+                        "description": model.get("description", "")
+                    }
+                    
+                    # Calculate cost per 1K tokens
+                    pricing = model.get("pricing", {})
+                    if "prompt" in pricing:
+                        cost_per_1k = float(pricing["prompt"]) * 1000
+                        model_info["cost_per_1k_tokens"] = cost_per_1k
+                    
+                    filtered_models.append(model_info)
+                
+                # Sort by cost (free models first)
+                filtered_models.sort(key=lambda x: x.get("cost_per_1k_tokens", 0))
+                
+                logger.info(f"Retrieved {len(filtered_models)} available models")
+                return filtered_models
+                
+        except Exception as e:
+            logger.error(f"Failed to get available models: {e}")
+            return []
+    
+    async def _get_or_create_session(self, session_id: UUID) -> ChatSession:
+        """Get existing session or create new one."""
+        result = await self.db.execute(
+            select(ChatSession).where(ChatSession.id == session_id)
+        )
+        session = result.scalar_one_or_none()
         
         if not session:
-            session = ChatSession(
-                session_id=session_id,
-                focused_person_id=person_context,
-                status="active"
-            )
-            self.db.add(session)
-            self.db.commit()
-        else:
-            # Update last activity
-            session.last_activity = datetime.utcnow()
-            if person_context:
-                session.focused_person_id = person_context
-            self.db.commit()
+            # Create new session
+            session = await self.create_chat_session()
         
         return session
     
-    async def _build_family_context(
-        self,
-        person_id: Optional[str],
-        session: ChatSession
-    ) -> str:
-        """Build context string from family data."""
-        context_parts = []
-        
-        # Get focused person info
-        focused_person = None
-        if person_id:
-            focused_person = self.db.query(Person).filter(Person.id == person_id).first()
-        elif session.focused_person_id:
-            focused_person = self.db.query(Person).filter(Person.id == session.focused_person_id).first()
-        
-        if focused_person:
-            context_parts.append(f"Currently focused on: {focused_person.name}")
-            
-            # Add person details
-            person_info = []
-            if focused_person.birth_date:
-                person_info.append(f"Born: {focused_person.birth_date}")
-            if focused_person.birth_place:
-                person_info.append(f"Birth place: {focused_person.birth_place}")
-            if focused_person.death_date:
-                person_info.append(f"Died: {focused_person.death_date}")
-            elif focused_person.is_living:
-                person_info.append("Living")
-            if focused_person.death_place:
-                person_info.append(f"Death place: {focused_person.death_place}")
-            if focused_person.occupation:
-                person_info.append(f"Occupation: {focused_person.occupation}")
-            
-            if person_info:
-                context_parts.append(f"Person details: {'; '.join(person_info)}")
-            
-            # Get family relationships
-            relationships = self.db.query(Relationship).filter(
-                (Relationship.person1_id == focused_person.id) |
-                (Relationship.person2_id == focused_person.id)
-            ).limit(20).all()
-            
-            if relationships:
-                rel_info = []
-                for rel in relationships:
-                    other_person = None
-                    rel_type = rel.relationship_type
-                    
-                    if rel.person1_id == focused_person.id:
-                        other_person = rel.person2
-                        # Flip relationship perspective
-                        if rel_type == "parent":
-                            rel_type = "child of"
-                        elif rel_type == "child":
-                            rel_type = "parent of"
-                    else:
-                        other_person = rel.person1
-                        if rel_type == "parent":
-                            rel_type = "parent of"
-                        elif rel_type == "child":
-                            rel_type = "child of"
-                    
-                    if other_person:
-                        rel_info.append(f"{rel_type}: {other_person.name}")
-                
-                if rel_info:
-                    context_parts.append(f"Family relationships: {'; '.join(rel_info)}")
-        
-        # Get recent conversation context
-        recent_messages = self.db.query(ChatMessage).filter(
-            ChatMessage.session_id == session.id
-        ).order_by(ChatMessage.timestamp.desc()).limit(5).all()
-        
-        if recent_messages:
-            context_parts.append("Recent conversation context available.")
-        
-        return "\n".join(context_parts) if context_parts else "No specific family context available."
-    
-    async def _prepare_messages(
-        self,
-        user_message: str,
-        context: str,
-        session: ChatSession
-    ) -> List[Dict[str, str]]:
-        """Prepare messages for OpenRouter API."""
-        system_prompt = f"""You are TreeTalk, a genealogical AI assistant that helps people explore their family history. 
-You have access to the user's genealogical database and can answer questions about their family tree.
-
-Current family context:
-{context}
-
-Guidelines:
-- Provide accurate information based only on the available family data
-- If you don't have specific information, say so clearly
-- Suggest related questions or family members to explore
-- Be conversational and engaging
-- Focus on family history, relationships, and genealogical connections
-- Always cite your information as coming from "your family tree data"
-
-Remember: You can only access the family data provided in the context above. You cannot access external databases or make up information."""
-        
-        messages = [{"role": "system", "content": system_prompt}]
-        
-        # Add recent conversation history
-        recent_messages = self.db.query(ChatMessage).filter(
-            ChatMessage.session_id == session.id
-        ).order_by(ChatMessage.timestamp.asc()).limit(10).all()
-        
-        for msg in recent_messages:
-            role = "user" if msg.message_type == "user" else "assistant"
-            messages.append({"role": role, "content": msg.content})
-        
-        # Add current user message
-        messages.append({"role": "user", "content": user_message})
-        
-        return messages
-    
-    async def _call_openrouter_api(
-        self,
-        messages: List[Dict[str, str]],
-        model: str
-    ) -> Dict[str, Any]:
-        """Call OpenRouter API."""
-        headers = {
-            "Authorization": f"Bearer {self.openrouter_api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": 500,
-            "temperature": 0.7,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                self.openrouter_url,
-                headers=headers,
-                json=payload
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {
-                    "error": f"API request failed with status {response.status_code}: {response.text}"
-                }
-    
-    async def _save_messages(
-        self,
-        session_id: str,
-        user_message: str,
-        ai_response: str,
-        response_time: float,
-        model: str,
-        tokens: int
-    ):
-        """Save messages to database."""
-        # Save user message
-        user_msg = ChatMessage(
+    async def _save_message(self, session_id: UUID, message_type: str, content: str,
+                           sequence_number: int, **kwargs) -> ChatMessage:
+        """Save chat message to database."""
+        message = ChatMessage(
             session_id=session_id,
-            message_type="user",
-            content=user_message
+            message_type=message_type,
+            content=content,
+            sequence_number=sequence_number,
+            **kwargs
         )
-        self.db.add(user_msg)
         
-        # Save AI response
-        ai_msg = ChatMessage(
+        self.db.add(message)
+        await self.db.flush()
+        return message
+    
+    async def _save_error_message(self, session_id: UUID, error_content: str):
+        """Save error message to chat history."""
+        session = await self._get_or_create_session(session_id)
+        
+        await self._save_message(
             session_id=session_id,
             message_type="assistant",
-            content=ai_response,
-            response_time_ms=int(response_time),
-            token_count=tokens,
-            model_used=model
+            content=error_content,
+            sequence_number=session.message_count + 1,
+            is_error=True
         )
-        self.db.add(ai_msg)
         
-        self.db.commit()
+        session.message_count += 1
+        await self.db.commit()
     
-    async def get_chat_history(self, session_id: str) -> List[Dict[str, Any]]:
-        """Get chat history for a session."""
-        session = self.db.query(ChatSession).filter(
-            ChatSession.session_id == session_id
-        ).first()
+    async def _prepare_genealogical_context(self, session: ChatSession, 
+                                          message: str) -> Dict[str, Any]:
+        """Prepare genealogical context for AI prompt."""
+        context = {}
         
-        if not session:
-            return []
-        
-        messages = self.db.query(ChatMessage).filter(
-            ChatMessage.session_id == session.id
-        ).order_by(ChatMessage.timestamp.asc()).all()
-        
-        return [
-            {
-                "type": msg.message_type,
-                "content": msg.content,
-                "timestamp": msg.timestamp.isoformat(),
-                "response_time_ms": msg.response_time_ms,
-                "tokens": msg.token_count
+        try:
+            # Include focused person information
+            if session.focused_person_id:
+                person_details = await self.family_service.get_person_details(
+                    session.focused_person_id,
+                    include_events=True,
+                    include_relationships=True
+                )
+                context["focused_person"] = person_details
+            
+            # Include family tree context if relevant
+            if session.focused_person_id and ("family" in message.lower() or 
+                                            "relative" in message.lower() or
+                                            "ancestor" in message.lower() or
+                                            "descendant" in message.lower()):
+                family_tree = await self.family_service.get_family_tree(
+                    session.focused_person_id, max_generations=3
+                )
+                context["family_tree"] = {
+                    "persons": family_tree["persons"][:20],  # Limit for context size
+                    "relationships": family_tree["relationships"][:30]
+                }
+            
+            # Search for relevant persons if names mentioned
+            potential_names = self._extract_names_from_message(message)
+            if potential_names and session.active_source_id:
+                relevant_persons = []
+                for name in potential_names[:3]:  # Limit searches
+                    persons = await self.family_service.search_persons(
+                        name, session.active_source_id, limit=5
+                    )
+                    relevant_persons.extend(persons[:2])
+                
+                if relevant_persons:
+                    context["mentioned_persons"] = relevant_persons
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Failed to prepare genealogical context: {e}")
+            return {}
+    
+    async def _get_ai_response(self, session: ChatSession, message: str,
+                             context_data: Dict[str, Any], 
+                             model_override: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
+        """Get AI response from OpenRouter."""
+        try:
+            api_key = await self._get_openrouter_api_key()
+            if not api_key:
+                raise ValueError("OpenRouter API key not configured")
+            
+            model_name = model_override or session.model_name or "openai/gpt-3.5-turbo"
+            
+            # Build conversation history
+            messages = [
+                {"role": "system", "content": self._build_system_prompt(context_data)}
+            ]
+            
+            # Add recent conversation history
+            recent_messages = await self._get_recent_messages(session.id, limit=10)
+            for msg in recent_messages:
+                role = "user" if msg.message_type == "user" else "assistant"
+                messages.append({"role": role, "content": msg.content})
+            
+            # Add current message
+            messages.append({"role": "user", "content": message})
+            
+            # Make API request
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": "https://treetalk.ai",
+                "X-Title": "TreeTalk",
+                "Content-Type": "application/json"
             }
-            for msg in messages
-        ]
+            
+            payload = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": session.temperature or 0.7,
+                "max_tokens": 1000
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.openrouter_base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                
+                response_data = response.json()
+                
+                # Extract response and metadata
+                ai_message = response_data["choices"][0]["message"]["content"]
+                
+                metadata = {
+                    "model_used": response_data.get("model", model_name),
+                    "tokens_used": response_data.get("usage", {}).get("total_tokens", 0),
+                    "cited_sources": []  # Could be enhanced to extract citations
+                }
+                
+                return ai_message, metadata
+                
+        except Exception as e:
+            logger.error(f"Failed to get AI response: {e}")
+            return f"I'm sorry, I encountered an error processing your request: {str(e)}", {}
+    
+    def _build_system_prompt(self, context_data: Dict[str, Any]) -> str:
+        """Build system prompt with genealogical context."""
+        base_prompt = """You are TreeTalk, an AI assistant specializing in genealogy and family history. 
+You help users explore and understand their family trees through natural conversation.
+
+Key guidelines:
+- Base your responses on the provided genealogical data only
+- Be helpful and conversational while remaining accurate
+- Suggest follow-up questions to encourage exploration
+- Always cite your sources when mentioning specific people or facts
+- If information is not available in the data, clearly state this
+
+"""
+        
+        if context_data:
+            base_prompt += "\n**Current Context:**\n"
+            
+            if "focused_person" in context_data:
+                person = context_data["focused_person"]
+                base_prompt += f"- Focused Person: {person.get('full_name')} ({person.get('life_span')})\n"
+            
+            if "family_tree" in context_data:
+                tree = context_data["family_tree"]
+                base_prompt += f"- Family Tree: {len(tree['persons'])} related persons available\n"
+            
+            if "mentioned_persons" in context_data:
+                persons = context_data["mentioned_persons"]
+                base_prompt += f"- Mentioned Persons: {len(persons)} potentially relevant persons found\n"
+        
+        return base_prompt
+    
+    async def _get_recent_messages(self, session_id: UUID, limit: int = 10) -> List[ChatMessage]:
+        """Get recent messages for conversation context."""
+        result = await self.db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .where(ChatMessage.is_error == False)
+            .order_by(desc(ChatMessage.sequence_number))
+            .limit(limit)
+        )
+        
+        messages = result.scalars().all()
+        return list(reversed(messages))
+    
+    async def _get_openrouter_api_key(self) -> Optional[str]:
+        """Get OpenRouter API key from configuration."""
+        return await Configuration.get_value(self.db, "openrouter_api_key")
+    
+    async def _get_default_model(self) -> str:
+        """Get default AI model from configuration."""
+        return await Configuration.get_value(self.db, "default_model", "openai/gpt-3.5-turbo")
+    
+    def _get_system_prompt(self) -> str:
+        """Get base system prompt template."""
+        return "You are TreeTalk, an AI assistant for exploring family history and genealogy."
+    
+    def _extract_names_from_message(self, message: str) -> List[str]:
+        """Extract potential person names from user message."""
+        # Simple name extraction - could be enhanced with NLP
+        words = message.split()
+        potential_names = []
+        
+        for i, word in enumerate(words):
+            if word[0].isupper() and len(word) > 2:
+                # Check if next word is also capitalized (likely a full name)
+                if i + 1 < len(words) and words[i + 1][0].isupper():
+                    potential_names.append(f"{word} {words[i + 1]}")
+                else:
+                    potential_names.append(word)
+        
+        return list(set(potential_names))[:5]  # Return unique names, max 5

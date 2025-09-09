@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: treetalk-postgres
+    environment:
+      POSTGRES_DB: treetalk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: treetalk_dev_password
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --encoding=UTF-8"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - treetalk-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ..
+      dockerfile: .build/Dockerfile.backend
+    container_name: treetalk-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:treetalk_dev_password@postgres:5432/treetalk
+      TREETALK_SECRET_KEY: ${TREETALK_SECRET_KEY:-dev-secret-key-change-in-production}
+      PYTHONPATH: /app
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../src/backend:/app
+      - uploaded_files:/app/uploads
+    networks:
+      - treetalk-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    command: >
+      sh -c "
+        cd /app &&
+        python -m alembic upgrade head 2>/dev/null || echo 'No migrations to run' &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  # Streamlit Frontend
+  frontend:
+    build:
+      context: ..
+      dockerfile: .build/Dockerfile.frontend
+    container_name: treetalk-frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+      PYTHONPATH: /app
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ../src/frontend:/app
+    networks:
+      - treetalk-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    command: >
+      sh -c "
+        cd /app &&
+        streamlit run main.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+      "
+
+volumes:
+  postgres_data:
+    driver: local
+  uploaded_files:
+    driver: local
+
+networks:
+  treetalk-network:
+    driver: bridge

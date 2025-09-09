@@ -8,7 +8,16 @@
       "Bash(dir:*)",
       "Bash(mkdir:*)",
       "Bash(copy \".env.example\" \".env\")",
-      "Bash(touch:*)"
+      "Bash(touch:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(cmd /c \"copy .config\\.env.example .config\\.env\")",
+      "Bash(docker:*)",
+      "Bash(streamlit run:*)",
+      "Bash(powershell:*)",
+      "WebFetch(domain:python-gedcom.readthedocs.io)"
     ],
     "deny": [],
     "ask": []

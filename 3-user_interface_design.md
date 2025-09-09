@@ -1,40 +1,69 @@
-# TreeTalk UX Design
+# TreeTalk — UX & Layout Specification
 
-## UX
+## 1) Global Navigation
+- **Top horizontal menu** with three items (tabs/pages):
+  1. **Data Exploration** (main page)
+  2. **Configuration** (API keys & model selection)
+  3. **GEDCOM File Management** (import/delete GEDCOM files)
 
-### Menu
-The menu is horizontal at the top of the screen, here is the structure
-- Data exploration tab (main page)
-- Configuration tab (configuration of APIs key)
-- GEDCOM files management section (page to import Gedcom files into the database and delete Gedcom files from the database)
+## 2) Data Exploration (Main Page)
 
-### Main page - Data exploration
-A Drop down menu to select the Gedcom file to explore (top of screen)
+### 2.1 GEDCOM Selector
+- **Dropdown** at the top of the page to choose the active GEDCOM dataset to explore.
 
-#### Family members section - Search and select family member
-- A search by name text box
-- A dynamic list of family members matching the research, when you click on a family member in this section, it will adjust the Family Tree Visualization section
+### 2.2 Family Members — Search & Select
+- **Text input**: search by person name.  
+- **Dynamic results list**: updates as the user types; clicking a person sets them as the **focused person** for the visualization.
 
-#### Family Tree Visualization section where you can visualize the family member and relationships with other members. 
-- Use streamlit-d3graph component
-- Show only 4 layers of relations
-- Color visuals in blue for men, pink for women and green for undefined sex
-- parents-children relation are plain lines
-- mariage relation are doted lines
-- 
+### 2.3 Family Tree Visualization
+- **Component**: `family-chart (D3.js)`.  
+- **Scope**: show **up to 4 layers** (degrees) of relationships from the focused person.  
+- **Node colors**:
+  - Male: **blue**
+  - Female: **pink**
+  - Unknown/unspecified sex: **green**
 
-#### 'Chat with Your Family History' section
-- positionned at the botom of the screen
-- A ChatGPT like interface to discuss with your date (leverage Openrouter API and the postgresql data)
+### 2.4 “Chat with Your Family History”
+- **Placement**: bottom of the page; width **matches** the Family Tree Visualization section.  
+- **UI**: ChatGPT-like interface (message list + input box).  
+- **Backend**:
+  - Use **OpenRouter API** for LLM responses.
+  - Retrieve context from **PostgreSQL** (populated by parsed GEDCOM and any enrichment).
 
-### Configuration
-- A screen to configure the Openrouter API. It will store the key in an encrypted file.
-- The screen should enable the modification of the API key
+## 3) Configuration Page
+- **OpenRouter API key** field (create & later edit).  
+- **Model selection** dropdown for chat:
+  - Populate by calling **`/api/v1/models`** (OpenRouter).
+  - **Sort by increasing price** (free models first).
+  - Display model name + pricing metadata.
+- **Persistence**: save all configuration values to a **PostgreSQL `configuration` table**.
 
-### GEDCOM files management section
-- A section to enable the upload of GEDCOM files
-- A section to see the list of gedcom files already uploaded
-- In the UI, allow the user to delete an already uploaded file (it will also delete all related entries in the database)
+## 4) GEDCOM File Management Page
+- **Upload section**: select and upload **.ged / GEDCOM** files; ingest into the database.  
+- **File list**: display all uploaded GEDCOM files (name, size, upload date, status).  
+- **Delete action**:
+  - Allow deleting a selected file from storage.
+  - **Cascade delete**: remove all related database entries ingested from that file.
 
-## Website mockup
-Generate the website mockup in pure HTML but based on component from the framework described in 1-application_requirements.md
+## 5) Website Mockup (Static)
+- Produce a **pure HTML** mockup of the three pages and their key components.  
+- **Use components from the framework defined in `1-application_requirements.md`** (naming, classes, and structure should align with that framework).  
+- The mockup should include:
+  - Top horizontal menu with the three destinations.
+  - Data Exploration page with GEDCOM dropdown, search/list, graph placeholder, and chat layout.
+  - Configuration page with API fields and model dropdown (mock data ok).
+  - GEDCOM management page with upload form, file table, and delete controls.
+- No dynamic behavior is required in the mockup; placeholders are acceptable where APIs would be called.
+
+## 6) Data & Interaction Notes
+- **Focused person** is the single source of truth for the visualization; changing selection updates the graph and chat context.  
+- **Privacy**: avoid storing chat histories containing sensitive personal data unless explicitly required; if stored, tie them to the selected GEDCOM file.  
+- **Error states**:
+  - If no GEDCOM is selected, disable search/visualization/chat and show a prompt to pick a dataset.
+  - If OpenRouter key is missing/invalid, disable chat and show an inline configuration hint.
+  - If model list fetch fails, allow manual model entry or retry.
+
+## 7) Visual/UX Constraints
+- Responsive layout; top menu remains visible.  
+- Chat section height is constrained but scrollable; input is fixed at the bottom of that section.  
+- Colors and line styles in the graph adhere strictly to the rules above for quick cognition.

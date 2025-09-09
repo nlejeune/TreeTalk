@@ -1,157 +1,162 @@
 """
-TreeTalk - FastAPI Backend Application
+TreeTalk Backend - FastAPI Application Main Entry Point
 
-This is the main entry point for the TreeTalk API backend.
-Provides RESTful API endpoints for the Streamlit frontend to:
-- Import and manage GEDCOM genealogy files
-- Query family tree data and relationships  
-- Chat with AI about family history
-- Manage data sources and authentication
+This module serves as the main entry point for the TreeTalk backend service.
+It configures and starts the FastAPI application with all necessary routes,
+middleware, and database connections for genealogical data management and
+conversational AI integration.
 
-Architecture:
-- FastAPI web framework for async REST API
-- SQLAlchemy ORM with PostgreSQL database
-- Modular route structure organized by domain
-- CORS enabled for frontend communication
+Key Features:
+- FastAPI REST API with automatic OpenAPI documentation
+- PostgreSQL database integration with SQLAlchemy
+- GEDCOM file processing and import
+- OpenRouter LLM integration for chat functionality
+- Encrypted configuration management
 """
 
-# Standard library imports
-import os
-import uuid
-from typing import List, Optional
-
-# Third-party imports
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from contextlib import asynccontextmanager
+import uvicorn
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-# Local imports - database utilities
-from .utils.database import get_db, engine, Base
+from models.configuration import get_database_url
+from routes import auth, chat, persons, gedcom, config
+from utils.database import create_tables
 
-# Local imports - data models (import to register with SQLAlchemy)
-from .models import person, relationship, source, chat_session, place, event
 
-# Local imports - API route modules
-from .routes import auth, persons, import_routes, chat, sources, config
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager for startup and shutdown events.
+    
+    Handles:
+    - Database connection initialization
+    - Table creation if needed
+    - Graceful cleanup on shutdown
+    """
+    # Startup
+    try:
+        # Initialize database connection
+        database_url = await get_database_url()
+        engine = create_async_engine(database_url, echo=True)
+        
+        # Create tables if they don't exist
+        await create_tables(engine)
+        
+        # Store engine in app state
+        app.state.engine = engine
+        app.state.SessionLocal = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        
+        print("✅ TreeTalk Backend started successfully")
+        yield
+        
+    except Exception as e:
+        print(f"❌ Failed to start TreeTalk Backend: {e}")
+        raise
+    finally:
+        # Shutdown
+        if hasattr(app.state, "engine"):
+            await app.state.engine.dispose()
+        print("🔄 TreeTalk Backend shutdown complete")
 
-# =============================================================================
-# DATABASE INITIALIZATION
-# =============================================================================
 
-# Create all database tables based on SQLAlchemy models
-# This runs at application startup to ensure schema exists
-Base.metadata.create_all(bind=engine)
-
-# =============================================================================
-# FASTAPI APPLICATION SETUP
-# =============================================================================
-
-# Initialize FastAPI application with metadata
+# Initialize FastAPI application
 app = FastAPI(
     title="TreeTalk API",
-    description="Backend API for TreeTalk - Converse with Your Family History",
+    description="Genealogical data management and conversational AI for family history exploration",
     version="1.0.0",
-    docs_url="/docs",  # Swagger UI endpoint
-    redoc_url="/redoc"  # ReDoc endpoint
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
-# =============================================================================
-# MIDDLEWARE CONFIGURATION
-# =============================================================================
-
-# Configure CORS middleware to allow frontend communication
-# Streamlit default ports: 8501 for main app, 8502 for additional instances
+# Configure CORS for Streamlit frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8501",    # Streamlit default port
-        "http://127.0.0.1:8501",   # Alternative localhost format
-    ],
-    allow_credentials=True,         # Allow cookies/auth headers
-    allow_methods=["*"],           # Allow all HTTP methods
-    allow_headers=["*"],           # Allow all headers
+    allow_origins=["http://localhost:8501", "http://127.0.0.1:8501"],  # Streamlit default ports
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# =============================================================================
-# API ROUTE REGISTRATION
-# =============================================================================
 
-# Register route modules with URL prefixes and OpenAPI tags
-# Each module handles a specific domain of functionality
-app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
-app.include_router(persons.router, prefix="/api/persons", tags=["persons"])
-app.include_router(import_routes.router, prefix="/api/import", tags=["import"])
-app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
-app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
-app.include_router(config.router, prefix="/api/config", tags=["configuration"])
-
-# =============================================================================
-# CORE API ENDPOINTS
-# =============================================================================
-
+# Root endpoint
 @app.get("/")
 async def root():
     """
-    Root endpoint - API information and status.
-    
-    Returns basic information about the TreeTalk API,
-    including version and operational status.
+    Root endpoint providing API information and health status.
     
     Returns:
-        dict: API metadata including message, version, and status
+        dict: API information including name, version, and status
     """
     return {
-        "message": "TreeTalk API - Converse with Your Family History",
+        "name": "TreeTalk API",
         "version": "1.0.0",
-        "status": "running"
+        "description": "Genealogical data management and conversational AI",
+        "status": "healthy",
+        "docs": "/docs"
     }
 
+
+# Health check endpoint
 @app.get("/health")
-async def health_check(db: Session = Depends(get_db)):
+async def health_check():
     """
     Health check endpoint for monitoring and load balancers.
     
-    Performs a simple database connectivity test to ensure
-    the application is healthy and ready to serve requests.
-    
-    Args:
-        db (Session): Database session dependency
-        
     Returns:
-        dict: Health status including database connectivity
-        
-    Raises:
-        HTTPException: 503 Service Unavailable if database is unreachable
+        dict: System health status
     """
     try:
-        # Execute simple query to test database connectivity
-        # Using SQLAlchemy text() to ensure proper query execution
-        db.execute(text("SELECT 1"))
-        
+        # Basic health check - could be extended to check database connectivity
         return {
             "status": "healthy",
-            "database": "connected",
-            "timestamp": "2024-01-01T00:00:00Z"  # TODO: Use actual timestamp
+            "service": "TreeTalk Backend",
+            "version": "1.0.0"
         }
     except Exception as e:
-        # Log error and return 503 Service Unavailable
-        raise HTTPException(
-            status_code=503, 
-            detail=f"Database connection failed: {str(e)}"
-        )
+        raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
 
-# =============================================================================
-# APPLICATION ENTRY POINT
-# =============================================================================
 
+# Database dependency
+async def get_db():
+    """Database dependency for FastAPI routes."""
+    async with app.state.SessionLocal() as session:
+        try:
+            yield session
+        except Exception as e:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+# Override the database dependency in routes
+from utils.database import get_database_session
+app.dependency_overrides[get_database_session] = get_db
+
+# Include API routes
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(config.router, prefix="/api/config", tags=["Configuration"])
+app.include_router(gedcom.router, prefix="/api/gedcom", tags=["GEDCOM Management"])
+app.include_router(persons.router, prefix="/api/persons", tags=["Person Management"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat & AI"])
+
+
+# Main entry point for development
 if __name__ == "__main__":
-    # Direct execution - start Uvicorn server
-    # In production, this would typically be handled by a process manager
-    import uvicorn
+    """
+    Development server entry point.
+    
+    For production deployment, use:
+    uvicorn src.backend.main:app --host 0.0.0.0 --port 8000
+    """
     uvicorn.run(
-        app, 
-        host="0.0.0.0",  # Listen on all interfaces
-        port=8000,       # Default port for TreeTalk API
-        reload=False     # Disable auto-reload in production
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
     )

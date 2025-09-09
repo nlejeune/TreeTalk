@@ -1,14 +1,8 @@
 # TreeTalk Application Requirements
 
-## Executive Summary
-TreeTalk is an innovative genealogical application that transforms how you explore and interact with your family history. 
-By combining the power of conversational artificial intelligence with comprehensive genealogical data management, TreeTalk creates an intelligent and interactive experience that makes family research as natural as a conversation with an experienced family historian.
-
 ## 1. Functional Requirements
 
-1. The application can have different data sources as inputs:
-    - Manual upload (For the MVP, GEDCOM files only but architecture the application to support different type of format later)
-    - External aplications through API (For the MVP FamilySearch API only but architecture the application to support different type of API later)
+1. The application data source is provided by a manual upload (For the MVP, GEDCOM files only but the application should be architectured to support different type of format later).
 2. The application must leverage LLM APIs for the purpose of offering chat functionality (The MVP application will be built with Openrouter API only)
 
 ## 2. Technical Requirements
@@ -30,13 +24,7 @@ By combining the power of conversational artificial intelligence with comprehens
     - There is no way to upload multiple time the same .ged fil
     - The database contain no duplicated entries
 
-- User story 1.2: **As a user**, I want to connect my FamilySearch account via their API to synchronize my family data.
-- Acceptance criteria:
-    - Secure OAuth authentication.
-    - Initial data synchronization.
-    - Ability to launch manual resynchronization.
-
-- User story 1.3: **As a user**, I want to see and manage all my data sources (imported GEDCOM)
+- User story 1.2: **As a user**, I want to see and manage all my data sources (imported GEDCOM)
 - Acceptance criteria:
     - Dashboard listing ged files.
     - Ability to delete a ged file (and all associated tables entries in the SQL database)
@@ -62,7 +50,7 @@ By combining the power of conversational artificial intelligence with comprehens
 - User story 3.2: **As a user**, I want the chatbot responses to be based only on my imported family data.
 - Acceptance criteria:
     - The backend transmits only relevant data to the LLM.
-    - Responses cite sources (GEDCOM, FamilySearch).
+    - Responses cite sources (GEDCOM).
     - Guided exploration
 
 - User story 3.3: **As a user**, I want the chatbot to suggest related questions (e.g., "Would you like to know more about Jean Dupont's descendants?").

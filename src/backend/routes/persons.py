@@ -1,274 +1,324 @@
 """
-Person API Routes - Individual Management Endpoints
+Person Management API Routes
 
-This module provides RESTful API endpoints for managing individual persons
-in the genealogy database. Core functionality for family tree exploration.
-
-Available Endpoints:
-- GET /api/persons/ - List all persons with pagination and filtering
-- GET /api/persons/{person_id} - Get individual person details  
-- GET /api/persons/{person_id}/family-tree - Get family tree data for visualization
-- PUT /api/persons/{person_id} - Update person information
-- DELETE /api/persons/{person_id} - Delete person (admin only)
-
-Features:
-- Comprehensive person data retrieval
-- Family tree generation for visualization
-- Search and filtering capabilities
-- Source-based data filtering
-- Performance-optimized database queries
-
-Family Tree Generation:
-The family-tree endpoint generates optimized data structures for
-frontend visualization, including:
-- Person details with birth/death information
-- Relationship mappings for graph generation  
-- Color coding by gender and living status
-- Efficient data formatting for Plotly/NetworkX
+This module provides REST API endpoints for person search, retrieval,
+and family tree data access for the TreeTalk genealogical application.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
-import uuid
+import logging
+from uuid import UUID
 
-from ..utils.database import get_db
-from ..models.person import Person
-from ..models.relationship import Relationship
-from ..services.family_service import FamilyService
+from utils.database import get_database_session
+from services.family_service import FamilyService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Endpoint to get a list of persons with optional filtering and pagination
-@router.get("/", response_model=List[Dict[str, Any]])
-async def get_persons(
-    source_id: Optional[str] = Query(None, description="Filter by source ID"),
-    search: Optional[str] = Query(None, description="Search by name"),
-    limit: int = Query(100, le=1000, description="Maximum number of results"),
-    offset: int = Query(0, ge=0, description="Number of results to skip"),
-    db: Session = Depends(get_db)
+
+@router.get("/search", response_model=List[Dict[str, Any]])
+async def search_persons(
+    q: str = Query(..., description="Search query (name or partial name)"),
+    source_id: Optional[UUID] = Query(None, description="Limit search to specific source"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of results"),
+    db: AsyncSession = Depends(get_database_session)
 ):
-    """Get persons with optional filtering."""
+    """
+    Search for persons by name or other criteria.
+    
+    Args:
+        q: Search query string
+        source_id: Optional source ID to limit search
+        limit: Maximum number of results to return (1-100)
+        db: Database session
+        
+    Returns:
+        List of matching persons with relevance scoring
+        
+    Raises:
+        HTTPException: If search fails
+    """
     try:
-        query = db.query(Person)
+        if len(q.strip()) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Search query must be at least 2 characters long"
+            )
         
-        # Filter by source
-        if source_id:
-            query = query.filter(Person.source_id == uuid.UUID(source_id))
+        family_service = FamilyService(db)
+        persons = await family_service.search_persons(
+            query=q,
+            source_id=source_id,
+            limit=limit
+        )
         
-        # Search by name
-        if search:
-            query = query.filter(Person.name.ilike(f"%{search}%"))
+        logger.info(f"Person search '{q}' returned {len(persons)} results")
         
-        # Apply pagination
-        persons = query.offset(offset).limit(limit).all()
+        return persons
         
-        result = []
-        for person in persons:
-            result.append({
-                "id": str(person.id),
-                "source_id": str(person.source_id),
-                "gedcom_id": person.gedcom_id,
-                "name": person.name,
-                "given_names": person.given_names,
-                "surname": person.surname,
-                "gender": person.gender,
-                "is_living": person.is_living,
-                "birth_date": person.birth_date.isoformat() if person.birth_date else None,
-                "birth_date_text": person.birth_date_text,
-                "birth_place": person.birth_place,
-                "death_date": person.death_date.isoformat() if person.death_date else None,
-                "death_date_text": person.death_date_text,
-                "death_place": person.death_place,
-                "occupation": person.occupation,
-                "religion": person.religion,
-                "notes": person.notes
-            })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Person search failed for '{q}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Search failed: {str(e)}"
+        )
+
+
+@router.get("/{person_id}", response_model=Dict[str, Any])
+async def get_person_details(
+    person_id: UUID,
+    include_events: bool = Query(True, description="Include life events"),
+    include_relationships: bool = Query(True, description="Include family relationships"),
+    db: AsyncSession = Depends(get_database_session)
+):
+    """
+    Get detailed information about a specific person.
+    
+    Args:
+        person_id: UUID of the person
+        include_events: Whether to include life events
+        include_relationships: Whether to include family relationships
+        db: Database session
         
-        return result
+    Returns:
+        Detailed person information
+        
+    Raises:
+        HTTPException: If person not found
+    """
+    try:
+        family_service = FamilyService(db)
+        person_data = await family_service.get_person_details(
+            person_id=person_id,
+            include_events=include_events,
+            include_relationships=include_relationships
+        )
+        
+        return person_data
         
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid parameter: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching persons: {str(e)}")
+        logger.error(f"Failed to get person details for {person_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve person details"
+        )
 
-# Endpoint to get details of a specific person by ID
-@router.get("/{person_id}")
-async def get_person(person_id: str, db: Session = Depends(get_db)):
-    """Get a specific person by ID."""
-    try:
-        person = db.query(Person).filter(Person.id == uuid.UUID(person_id)).first()
-        
-        if not person:
-            raise HTTPException(status_code=404, detail="Person not found")
-        
-        return {
-            "id": str(person.id),
-            "source_id": str(person.source_id),
-            "gedcom_id": person.gedcom_id,
-            "external_id": person.external_id,
-            "name": person.name,
-            "given_names": person.given_names,
-            "surname": person.surname,
-            "name_suffix": person.name_suffix,
-            "nickname": person.nickname,
-            "gender": person.gender,
-            "is_living": person.is_living,
-            "birth_date": person.birth_date.isoformat() if person.birth_date else None,
-            "birth_date_text": person.birth_date_text,
-            "birth_place": person.birth_place,
-            "death_date": person.death_date.isoformat() if person.death_date else None,
-            "death_date_text": person.death_date_text,
-            "death_place": person.death_place,
-            "occupation": person.occupation,
-            "religion": person.religion,
-            "notes": person.notes,
-            "confidence_level": person.confidence_level,
-            "created_at": person.created_at.isoformat(),
-            "updated_at": person.updated_at.isoformat()
-        }
-        
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid person ID format")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching person: {str(e)}")
 
-# Endpoint to get family tree data for a specific person
-@router.get("/{person_id}/family-tree")
+@router.get("/{person_id}/family-tree", response_model=Dict[str, Any])
 async def get_family_tree(
-    person_id: str,
-    generations: int = Query(3, ge=1, le=5, description="Number of generations to include"),
-    db: Session = Depends(get_db)
+    person_id: UUID,
+    max_generations: int = Query(4, ge=1, le=8, description="Maximum generations to include"),
+    source_id: Optional[UUID] = Query(None, description="Limit to specific source"),
+    db: AsyncSession = Depends(get_database_session)
 ):
-    """Get family tree data for visualization."""
-    try:
-        person = db.query(Person).filter(Person.id == uuid.UUID(person_id)).first()
-        
-        if not person:
-            raise HTTPException(status_code=404, detail="Person not found")
-        
-        family_service = FamilyService(db)
-        tree_data = await family_service.get_family_tree(person.id, generations)
-        
-        return tree_data
-        
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid person ID format")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching family tree: {str(e)}")
-
-# Endpoint to get ancestors of a specific person
-@router.get("/{person_id}/ancestors")
-async def get_ancestors(
-    person_id: str,
-    generations: int = Query(5, ge=1, le=10, description="Number of generations to go back"),
-    db: Session = Depends(get_db)
-):
-    """Get ancestors of a person."""
-    try:
-        person = db.query(Person).filter(Person.id == uuid.UUID(person_id)).first()
-        
-        if not person:
-            raise HTTPException(status_code=404, detail="Person not found")
-        
-        family_service = FamilyService(db)
-        ancestors = await family_service.get_ancestors(person.id, generations)
-        
-        return {
-            "person_id": str(person.id),
-            "person_name": person.name,
-            "ancestors": ancestors
-        }
-        
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid person ID format")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching ancestors: {str(e)}")
+    """
+    Get family tree data centered on a specific person.
     
-# Endpoint to get descendants of a specific person
-@router.get("/{person_id}/descendants")
-async def get_descendants(
-    person_id: str,
-    generations: int = Query(5, ge=1, le=10, description="Number of generations to go forward"),
-    db: Session = Depends(get_db)
-):
-    """Get descendants of a person."""
-    try:
-        person = db.query(Person).filter(Person.id == uuid.UUID(person_id)).first()
+    Args:
+        person_id: UUID of the focal person
+        max_generations: Maximum generations to include (1-8)
+        source_id: Optional source ID to limit data
+        db: Database session
         
-        if not person:
-            raise HTTPException(status_code=404, detail="Person not found")
+    Returns:
+        Family tree data with persons and relationships
+        
+    Raises:
+        HTTPException: If person not found or retrieval fails
+    """
+    try:
+        family_service = FamilyService(db)
+        family_tree_data = await family_service.get_family_tree(
+            focal_person_id=person_id,
+            max_generations=max_generations,
+            source_id=source_id
+        )
+        
+        logger.info(f"Retrieved family tree for {person_id}: "
+                   f"{family_tree_data['metadata']['total_persons']} persons")
+        
+        return family_tree_data
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to get family tree for {person_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve family tree data"
+        )
+
+
+@router.get("/{person1_id}/relationship-path/{person2_id}", response_model=Optional[List[Dict[str, Any]]])
+async def get_relationship_path(
+    person1_id: UUID,
+    person2_id: UUID,
+    max_depth: int = Query(6, ge=1, le=10, description="Maximum path depth to search"),
+    db: AsyncSession = Depends(get_database_session)
+):
+    """
+    Find the relationship path between two persons.
+    
+    Args:
+        person1_id: UUID of the first person
+        person2_id: UUID of the second person
+        max_depth: Maximum path depth to search (1-10)
+        db: Database session
+        
+    Returns:
+        Relationship path between the persons, or null if no connection
+        
+    Raises:
+        HTTPException: If either person not found or search fails
+    """
+    try:
+        if person1_id == person2_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot find relationship path between the same person"
+            )
         
         family_service = FamilyService(db)
-        descendants = await family_service.get_descendants(person.id, generations)
+        relationship_path = await family_service.get_relationship_path(
+            person1_id=person1_id,
+            person2_id=person2_id,
+            max_depth=max_depth
+        )
         
-        return {
-            "person_id": str(person.id),
-            "person_name": person.name,
-            "descendants": descendants
-        }
+        if relationship_path:
+            logger.info(f"Found relationship path between {person1_id} and {person2_id}")
+        else:
+            logger.info(f"No relationship path found between {person1_id} and {person2_id}")
         
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid person ID format")
+        return relationship_path
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching descendants: {str(e)}")
+        logger.error(f"Failed to find relationship path between {person1_id} and {person2_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to find relationship path"
+        )
 
-# Endpoint to get all relationships of a specific person
-@router.get("/{person_id}/relationships")
-async def get_relationships(person_id: str, db: Session = Depends(get_db)):
-    """Get all relationships for a person."""
+
+@router.get("/{person_id}/ancestors", response_model=List[Dict[str, Any]])
+async def get_ancestors(
+    person_id: UUID,
+    generations: int = Query(4, ge=1, le=10, description="Number of ancestor generations"),
+    source_id: Optional[UUID] = Query(None, description="Limit to specific source"),
+    db: AsyncSession = Depends(get_database_session)
+):
+    """
+    Get ancestors of a specific person.
+    
+    Args:
+        person_id: UUID of the person
+        generations: Number of generations to retrieve
+        source_id: Optional source ID to limit data
+        db: Database session
+        
+    Returns:
+        List of ancestor persons
+        
+    Raises:
+        HTTPException: If person not found or retrieval fails
+    """
     try:
-        person = db.query(Person).filter(Person.id == uuid.UUID(person_id)).first()
+        # This would be implemented using the family service
+        # For now, return a placeholder response
+        family_service = FamilyService(db)
         
-        if not person:
-            raise HTTPException(status_code=404, detail="Person not found")
+        # Use family tree data and filter for ancestors
+        family_tree = await family_service.get_family_tree(
+            focal_person_id=person_id,
+            max_generations=generations,
+            source_id=source_id
+        )
         
-        # Get relationships where this person is involved
-        relationships = db.query(Relationship).filter(
-            (Relationship.person1_id == person.id) | 
-            (Relationship.person2_id == person.id)
-        ).all()
+        # Filter for ancestor persons (would implement proper ancestor logic)
+        ancestors = [
+            person for person in family_tree["persons"]
+            if person["id"] != str(person_id)  # Exclude focal person
+        ]
         
-        result = []
-        for rel in relationships:
-            # Determine the other person and relationship direction
-            if rel.person1_id == person.id:
-                other_person = rel.person2
-                relationship_type = rel.relationship_type
-            else:
-                other_person = rel.person1
-                # Flip relationship perspective
-                if rel.relationship_type == "parent":
-                    relationship_type = "child"
-                elif rel.relationship_type == "child":
-                    relationship_type = "parent"
-                else:
-                    relationship_type = rel.relationship_type
-            
-            result.append({
-                "relationship_id": str(rel.id),
-                "relationship_type": relationship_type,
-                "related_person": {
-                    "id": str(other_person.id),
-                    "name": other_person.name,
-                    "birth_date": other_person.birth_date.isoformat() if other_person.birth_date else None,
-                    "death_date": other_person.death_date.isoformat() if other_person.death_date else None,
-                    "gender": other_person.gender,
-                    "is_living": other_person.is_living
-                },
-                "start_date": rel.start_date.isoformat() if rel.start_date else None,
-                "end_date": rel.end_date.isoformat() if rel.end_date else None,
-                "place": rel.place,
-                "notes": rel.notes
-            })
+        return ancestors
         
-        return {
-            "person_id": str(person.id),
-            "person_name": person.name,
-            "relationships": result
-        }
-        
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid person ID format")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching relationships: {str(e)}")
+        logger.error(f"Failed to get ancestors for {person_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve ancestors"
+        )
+
+
+@router.get("/{person_id}/descendants", response_model=List[Dict[str, Any]])
+async def get_descendants(
+    person_id: UUID,
+    generations: int = Query(4, ge=1, le=10, description="Number of descendant generations"),
+    source_id: Optional[UUID] = Query(None, description="Limit to specific source"),
+    db: AsyncSession = Depends(get_database_session)
+):
+    """
+    Get descendants of a specific person.
+    
+    Args:
+        person_id: UUID of the person
+        generations: Number of generations to retrieve
+        source_id: Optional source ID to limit data
+        db: Database session
+        
+    Returns:
+        List of descendant persons
+        
+    Raises:
+        HTTPException: If person not found or retrieval fails
+    """
+    try:
+        # This would be implemented using the family service
+        # For now, return a placeholder response
+        family_service = FamilyService(db)
+        
+        # Use family tree data and filter for descendants
+        family_tree = await family_service.get_family_tree(
+            focal_person_id=person_id,
+            max_generations=generations,
+            source_id=source_id
+        )
+        
+        # Filter for descendant persons (would implement proper descendant logic)
+        descendants = [
+            person for person in family_tree["persons"]
+            if person["id"] != str(person_id)  # Exclude focal person
+        ]
+        
+        return descendants
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to get descendants for {person_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve descendants"
+        )

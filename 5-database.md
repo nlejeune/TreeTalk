@@ -12,6 +12,26 @@ TreeTalk uses PostgreSQL as its primary database for storing genealogical data w
 4. **Flexible Relationships**: Support for complex family structures
 5. **Audit Trail**: Track data origin and modification history
 
+## Implementation Details
+
+TreeTalk uses **SQLAlchemy** with async support for database operations:
+
+- **Engine**: Async PostgreSQL engine with `asyncpg` driver
+- **ORM**: SQLAlchemy declarative models with relationship mappings
+- **Sessions**: Async session management for concurrent operations
+- **Migrations**: Schema creation via `Base.metadata.create_all()`
+- **Connection**: Configurable via `DATABASE_URL` environment variable
+
+**Model Files**: Located in `src/backend/models/`
+- `person.py` - Person entity with full-text search capabilities
+- `source.py` - Data provenance and import tracking
+- `relationship.py` - Family connections with directional logic
+- `event.py` - Life events with flexible date handling
+- `place.py` - Geographic locations with hierarchical addressing
+- `chat_session.py` - Conversation context management
+- `chat_message.py` - Individual chat message storage
+- `configuration.py` - Encrypted settings with Fernet encryption
+
 ## Core Tables
 
 ### 1. sources
@@ -26,8 +46,8 @@ CREATE TABLE sources (
     file_size INTEGER,
     file_hash VARCHAR(64) UNIQUE,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
-    import_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    import_date TIMESTAMP WITH TIME ZONE DEFAULT func.now(),
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT func.now(),
     persons_count INTEGER DEFAULT 0,
     families_count INTEGER DEFAULT 0,
     description TEXT,
@@ -114,7 +134,7 @@ CREATE INDEX idx_relationships_marriage ON relationships(marriage_date) WHERE ma
 ```
 
 **Key Features:**
-- Directional relationships (person1 ’ person2)
+- Directional relationships (person1 ï¿½ person2)
 - Support for multiple marriage/divorce cycles
 - Confidence levels for uncertain relationships
 - Relationship subtypes (biological, adoptive, step)
@@ -195,8 +215,8 @@ Chat conversation contexts and settings
 CREATE TABLE chat_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_activity TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT func.now(),
+    last_activity TIMESTAMP WITH TIME ZONE DEFAULT func.now(),
     focused_person_id UUID REFERENCES persons(id),
     active_source_id UUID REFERENCES sources(id),
     is_active BOOLEAN DEFAULT TRUE,
@@ -220,7 +240,7 @@ CREATE TABLE chat_messages (
     session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
     message_type VARCHAR(20) NOT NULL,
     content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT func.now(),
     sequence_number INTEGER NOT NULL,
     model_used VARCHAR(100),
     tokens_used INTEGER,
@@ -236,6 +256,13 @@ CREATE INDEX idx_chat_messages_created ON chat_messages(created_at);
 CREATE INDEX idx_chat_messages_type ON chat_messages(message_type);
 ```
 
+**Key Features:**
+- Sequential message ordering within sessions
+- Support for both 'user' and 'assistant' message types
+- Rich metadata for AI responses (tokens, response time)
+- JSONB fields for genealogy context and source citations
+- Error handling for failed AI interactions
+
 ### 8. configuration
 Encrypted application configuration
 
@@ -243,41 +270,60 @@ Encrypted application configuration
 CREATE TABLE configuration (
     key VARCHAR(255) PRIMARY KEY,
     value TEXT NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT func.now()
 );
 
 CREATE INDEX idx_configuration_updated ON configuration(updated_at);
 ```
+
+**Key Features:**
+- Simple key-value store for application settings
+- Encrypted value storage using Fernet (cryptography library)
+- Auto-updating timestamp for change tracking
+- Used for secure storage of API keys and user preferences
 
 ## Relationships and Constraints
 
 ### Foreign Key Relationships
 
 ```
-sources (1) ’ (N) persons
-sources (1) ’ (N) relationships
-sources (1) ’ (N) places
-sources (1) ’ (N) events
+sources (1) â†’ (N) persons
+sources (1) â†’ (N) relationships
+sources (1) â†’ (N) places
+sources (1) â†’ (N) events
+sources (1) â†’ (N) chat_sessions (as active_source)
 
-persons (1) ’ (N) events
-persons (1) ’ (N) relationships (as person1)
-persons (1) ’ (N) relationships (as person2)
-persons (1) ’ (N) chat_sessions (as focused_person)
+persons (1) â†’ (N) events
+persons (1) â†’ (N) relationships (as person1)
+persons (1) â†’ (N) relationships (as person2)
+persons (1) â†’ (N) chat_sessions (as focused_person)
+persons (0..1) â†’ (N) events (as other_person)
 
-places (1) ’ (N) events
-places (1) ’ (N) relationships (marriage_place)
+places (1) â†’ (N) events
+places (1) â†’ (N) relationships (marriage_place)
 
-chat_sessions (1) ’ (N) chat_messages
-sources (1) ’ (N) chat_sessions (as active_source)
+chat_sessions (1) â†’ (N) chat_messages
 ```
 
 ### Data Integrity Rules
 
-1. **Cascade Deletes**: Deleting a source removes all associated data
+1. **Cascade Deletes**: 
+   - Deleting a source removes all associated persons, relationships, events, and places
+   - Deleting a person removes all their events and relationships
+   - Deleting a chat session removes all associated messages
+
 2. **Referential Integrity**: All foreign keys must reference existing records
-3. **Date Validation**: Death dates must be after birth dates (application level)
-4. **Gender Constraints**: Gender values limited to M, F, U (Unknown)
-5. **Status Validation**: Limited to predefined status values
+
+3. **Application-Level Validations**:
+   - Death dates must be after birth dates
+   - Gender values limited to 'M', 'F', 'U' (Unknown), or NULL
+   - Source status values: 'pending', 'processing', 'completed', 'error'
+   - Message types: 'user', 'assistant'
+   - Confidence levels: 'high', 'medium', 'low'
+
+4. **Unique Constraints**:
+   - Source file_hash prevents duplicate imports
+   - Configuration keys are unique
 
 ## Performance Optimizations
 

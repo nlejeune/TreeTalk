@@ -32,7 +32,7 @@ services:
     container_name: treetalk-backend
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:treetalk_dev_password@postgres:5432/treetalk
-      TREETALK_SECRET_KEY: ${TREETALK_SECRET_KEY:-dev-secret-key-change-in-production}
+      TREETALK_SECRET_KEY: ${TREETALK_SECRET_KEY:-hrGUFF1eT4WVO3SmhRvcZ14vesa0yGc4j39TeWCHTPI=}
       PYTHONPATH: /app
     ports:
       - "8000:8000"

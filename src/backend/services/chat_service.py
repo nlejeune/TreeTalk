@@ -213,7 +213,8 @@ class ChatService:
         try:
             api_key = await self._get_openrouter_api_key()
             if not api_key:
-                return []
+                logger.warning("No OpenRouter API key configured, returning default models")
+                return self._get_default_models()
             
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -225,40 +226,92 @@ class ChatService:
                 response = await client.get(
                     f"{self.openrouter_base_url}/models",
                     headers=headers,
-                    timeout=10.0
+                    timeout=15.0
                 )
                 response.raise_for_status()
                 
                 models_data = response.json()
+                logger.info(f"Received {len(models_data.get('data', []))} models from OpenRouter API")
                 
-                # Filter and sort models
+                # Filter and process models
                 filtered_models = []
                 for model in models_data.get("data", []):
+                    # Skip models without pricing information or that are not available
+                    if not model.get("pricing") or model.get("pricing", {}).get("prompt") is None:
+                        continue
+                    
+                    # Calculate cost per 1K tokens (OpenRouter pricing is per token)
+                    pricing = model.get("pricing", {})
+                    prompt_cost = float(pricing.get("prompt", "0"))
+                    completion_cost = float(pricing.get("completion", "0"))
+                    
+                    # Use average of prompt and completion for display (per 1K tokens)
+                    cost_per_1k_tokens = ((prompt_cost + completion_cost) / 2) * 1000
+                    
                     model_info = {
                         "id": model.get("id"),
                         "name": model.get("name", model.get("id")),
-                        "pricing": model.get("pricing", {}),
+                        "cost_per_1k_tokens": round(cost_per_1k_tokens, 4),
                         "context_length": model.get("context_length", 0),
-                        "description": model.get("description", "")
+                        "description": model.get("description", ""),
+                        "pricing": {
+                            "prompt": prompt_cost,
+                            "completion": completion_cost
+                        }
                     }
-                    
-                    # Calculate cost per 1K tokens
-                    pricing = model.get("pricing", {})
-                    if "prompt" in pricing:
-                        cost_per_1k = float(pricing["prompt"]) * 1000
-                        model_info["cost_per_1k_tokens"] = cost_per_1k
                     
                     filtered_models.append(model_info)
                 
-                # Sort by cost (free models first)
+                # Sort by cost (free/cheaper models first)
                 filtered_models.sort(key=lambda x: x.get("cost_per_1k_tokens", 0))
                 
-                logger.info(f"Retrieved {len(filtered_models)} available models")
+                logger.info(f"Processed {len(filtered_models)} available models with pricing")
                 return filtered_models
                 
         except Exception as e:
-            logger.error(f"Failed to get available models: {e}")
-            return []
+            logger.error(f"Failed to get available models from OpenRouter: {e}")
+            # Return default models on error
+            return self._get_default_models()
+    
+    def _get_default_models(self) -> List[Dict[str, Any]]:
+        """Return default models when OpenRouter API is not available."""
+        models = [
+            {
+                "id": "meta-llama/llama-3.1-8b-instruct:free",
+                "name": "Llama 3.1 8B Instruct (Free)",
+                "cost_per_1k_tokens": 0.0,
+                "context_length": 131072,
+                "description": "Free open-source model with good performance",
+                "pricing": {"prompt": 0.0, "completion": 0.0}
+            },
+            {
+                "id": "openai/gpt-4o-mini",
+                "name": "GPT-4o Mini",
+                "cost_per_1k_tokens": 0.0002,
+                "context_length": 128000,
+                "description": "Affordable small model with high intelligence",
+                "pricing": {"prompt": 0.00000015, "completion": 0.0000006}
+            },
+            {
+                "id": "anthropic/claude-3-haiku",
+                "name": "Claude 3 Haiku",
+                "cost_per_1k_tokens": 0.0008,
+                "context_length": 200000,
+                "description": "Fastest model with strong performance",
+                "pricing": {"prompt": 0.00000025, "completion": 0.00000125}
+            },
+            {
+                "id": "openai/gpt-3.5-turbo",
+                "name": "GPT-3.5 Turbo",
+                "cost_per_1k_tokens": 0.002,
+                "context_length": 4096,
+                "description": "Fast and efficient model for general conversation",
+                "pricing": {"prompt": 0.000001, "completion": 0.000002}
+            }
+        ]
+        # Ensure models are sorted by cost (free first)
+        models.sort(key=lambda x: x.get("cost_per_1k_tokens", 0))
+        return models
     
     async def _get_or_create_session(self, session_id: UUID) -> ChatSession:
         """Get existing session or create new one."""
@@ -309,7 +362,32 @@ class ChatService:
         context = {}
         
         try:
-            # Include focused person information
+            # Search for relevant persons if names mentioned (do this first)
+            potential_names = self._extract_names_from_message(message)
+            mentioned_persons = []
+            
+            if potential_names:
+                for name in potential_names[:3]:  # Limit searches
+                    persons = await self.family_service.search_persons(
+                        name, session.active_source_id, limit=5
+                    )
+                    for person in persons[:2]:  # Top 2 matches per name
+                        # Get detailed information for each mentioned person
+                        try:
+                            person_details = await self.family_service.get_person_details(
+                                person['id'],
+                                include_events=True,
+                                include_relationships=True
+                            )
+                            mentioned_persons.append(person_details)
+                        except Exception as e:
+                            logger.warning(f"Could not get details for person {person['id']}: {e}")
+                            mentioned_persons.append(person)
+                
+                if mentioned_persons:
+                    context["mentioned_persons"] = mentioned_persons
+            
+            # Include focused person information (expand if someone was mentioned)
             if session.focused_person_id:
                 person_details = await self.family_service.get_person_details(
                     session.focused_person_id,
@@ -318,31 +396,48 @@ class ChatService:
                 )
                 context["focused_person"] = person_details
             
-            # Include family tree context if relevant
-            if session.focused_person_id and ("family" in message.lower() or 
-                                            "relative" in message.lower() or
-                                            "ancestor" in message.lower() or
-                                            "descendant" in message.lower()):
-                family_tree = await self.family_service.get_family_tree(
-                    session.focused_person_id, max_generations=3
-                )
-                context["family_tree"] = {
-                    "persons": family_tree["persons"][:20],  # Limit for context size
-                    "relationships": family_tree["relationships"][:30]
-                }
+            # Include family tree context more broadly (not just for specific keywords)
+            family_keywords = [
+                "family", "relative", "ancestor", "descendant", "parent", "child", 
+                "mother", "father", "son", "daughter", "brother", "sister",
+                "grandmother", "grandfather", "grandson", "granddaughter",
+                "uncle", "aunt", "nephew", "niece", "cousin", "spouse", "wife", "husband",
+                "born", "died", "married", "children", "relationship", "related"
+            ]
             
-            # Search for relevant persons if names mentioned
-            potential_names = self._extract_names_from_message(message)
-            if potential_names and session.active_source_id:
-                relevant_persons = []
-                for name in potential_names[:3]:  # Limit searches
-                    persons = await self.family_service.search_persons(
-                        name, session.active_source_id, limit=5
-                    )
-                    relevant_persons.extend(persons[:2])
+            if (session.focused_person_id and 
+                any(keyword in message.lower() for keyword in family_keywords)):
                 
-                if relevant_persons:
-                    context["mentioned_persons"] = relevant_persons
+                try:
+                    family_tree = await self.family_service.get_family_tree(
+                        session.focused_person_id, max_generations=3
+                    )
+                    context["family_tree"] = {
+                        "persons": family_tree["persons"][:20],  # Limit for context size
+                        "relationships": family_tree["relationships"][:30]
+                    }
+                except Exception as e:
+                    logger.warning(f"Could not get family tree for focused person: {e}")
+            
+            # If we found mentioned persons but no focused person, set the first mentioned as context
+            elif mentioned_persons and not session.focused_person_id:
+                try:
+                    primary_person = mentioned_persons[0]
+                    family_tree = await self.family_service.get_family_tree(
+                        primary_person['id'], max_generations=2
+                    )
+                    context["family_tree"] = {
+                        "persons": family_tree["persons"][:15],
+                        "relationships": family_tree["relationships"][:20]
+                    }
+                except Exception as e:
+                    logger.warning(f"Could not get family tree for mentioned person: {e}")
+            
+            # Log context preparation for debugging
+            logger.info(f"Prepared context with: "
+                       f"focused_person={'focused_person' in context}, "
+                       f"family_tree={'family_tree' in context}, "
+                       f"mentioned_persons={len(mentioned_persons)} persons")
             
             return context
             
@@ -359,7 +454,12 @@ class ChatService:
             if not api_key:
                 raise ValueError("OpenRouter API key not configured")
             
+            # Validate API key format (basic check)
+            if not api_key.strip() or len(api_key.strip()) < 10:
+                raise ValueError("OpenRouter API key appears to be invalid or corrupted")
+            
             model_name = model_override or session.model_name or "openai/gpt-3.5-turbo"
+            logger.info(f"Making API request to OpenRouter with model: {model_name}")
             
             # Build conversation history
             messages = [
@@ -377,7 +477,7 @@ class ChatService:
             
             # Make API request
             headers = {
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {api_key.strip()}",
                 "HTTP-Referer": "https://treetalk.ai",
                 "X-Title": "TreeTalk",
                 "Content-Type": "application/json"
@@ -397,6 +497,18 @@ class ChatService:
                     json=payload,
                     timeout=30.0
                 )
+                
+                # Enhanced error handling for different HTTP status codes
+                if response.status_code == 401:
+                    logger.error("OpenRouter API key authentication failed - key may be invalid")
+                    raise ValueError("OpenRouter API key is invalid or expired. Please check your API key configuration.")
+                elif response.status_code == 429:
+                    logger.error("OpenRouter API rate limit exceeded")
+                    raise ValueError("Rate limit exceeded. Please try again later.")
+                elif response.status_code == 402:
+                    logger.error("OpenRouter API insufficient credits")
+                    raise ValueError("Insufficient credits in your OpenRouter account. Please add credits.")
+                
                 response.raise_for_status()
                 
                 response_data = response.json()
@@ -418,32 +530,100 @@ class ChatService:
     
     def _build_system_prompt(self, context_data: Dict[str, Any]) -> str:
         """Build system prompt with genealogical context."""
-        base_prompt = """You are TreeTalk, an AI assistant specializing in genealogy and family history. 
-You help users explore and understand their family trees through natural conversation.
+        base_prompt = """You are TreeTalk, a specialized AI assistant for exploring family history data stored in a PostgreSQL database.
 
-Key guidelines:
-- Base your responses on the provided genealogical data only
-- Be helpful and conversational while remaining accurate
-- Suggest follow-up questions to encourage exploration
-- Always cite your sources when mentioning specific people or facts
-- If information is not available in the data, clearly state this
+**CRITICAL INSTRUCTIONS - MUST FOLLOW:**
+
+1. **DATABASE-ONLY RESPONSES**: You MUST only provide information that exists in the provided genealogical database context. DO NOT use any external knowledge, internet information, or general historical facts.
+
+2. **NO HALLUCINATION**: If you don't have specific information about a person, date, place, or relationship in the provided data, you MUST say "I don't have that information in your family tree data" rather than guessing or providing general information.
+
+3. **EXACT DATA ONLY**: When providing facts (names, dates, places, relationships), use EXACTLY what appears in the database. Do not embellish, correct, or add details that aren't explicitly provided.
+
+4. **CLEAR LIMITATIONS**: If the user asks about information not available in the context data, clearly explain that you can only access their uploaded family tree data, not external historical records or internet sources.
+
+5. **CITE SOURCES**: Always reference which person or relationship in their tree the information comes from (e.g., "According to your family tree data for John Smith...")
+
+6. **DATA VALIDATION**: If data appears incomplete or uncertain in the database (like partial dates or approximate years), acknowledge this uncertainty explicitly.
+
+**RESPONSE FORMAT:**
+- Start responses with references to "your family tree data" or "in your genealogical database"
+- Use phrases like "Based on the information in your tree..." 
+- End with suggestions for exploring related family members when appropriate
+- If no relevant data exists, suggest what types of information would be helpful to add
+
+**FORBIDDEN ACTIONS:**
+- Do NOT provide biographical information from general knowledge
+- Do NOT suggest historical context unless it's in the database
+- Do NOT "fill in gaps" with likely scenarios or common practices
+- Do NOT provide dates, places, or relationships not explicitly in the data
 
 """
         
+        # Add specific structured data from the database
         if context_data:
-            base_prompt += "\n**Current Context:**\n"
+            base_prompt += "\n**GENEALOGICAL DATABASE RECORDS - USE ONLY THIS DATA:**\n"
             
             if "focused_person" in context_data:
                 person = context_data["focused_person"]
-                base_prompt += f"- Focused Person: {person.get('full_name')} ({person.get('life_span')})\n"
+                base_prompt += f"\n=== PRIMARY PERSON RECORD ===\n"
+                base_prompt += f"Name: {person.get('full_name', 'Unknown')}\n"
+                base_prompt += f"Life Span: {person.get('life_span', 'Unknown dates')}\n"
+                base_prompt += f"Gender: {person.get('gender', 'Unknown')}\n"
+                
+                # Add birth/death details if available
+                if person.get('birth_date'):
+                    base_prompt += f"Birth: {person.get('birth_date')} {person.get('birth_place', '')}\n".strip() + "\n"
+                if person.get('death_date'):
+                    base_prompt += f"Death: {person.get('death_date')} {person.get('death_place', '')}\n".strip() + "\n"
+                
+                # Add events
+                events = person.get('events', [])
+                if events:
+                    base_prompt += f"Events in database ({len(events)}):\n"
+                    for event in events[:5]:  # Limit to first 5 events
+                        event_desc = f"  - {event.get('event_type', 'Unknown')}"
+                        if event.get('event_date'):
+                            event_desc += f" on {event.get('event_date')}"
+                        if event.get('place'):
+                            event_desc += f" at {event.get('place')}"
+                        base_prompt += event_desc + "\n"
+                
+                # Add relationships
+                relationships = person.get('relationships', [])
+                if relationships:
+                    base_prompt += f"Relationships in database ({len(relationships)}):\n"
+                    for rel in relationships[:10]:  # Limit to first 10 relationships
+                        base_prompt += f"  - {rel.get('relationship_type', 'Unknown')}: {rel.get('related_person_name', 'Unknown person')}\n"
             
             if "family_tree" in context_data:
                 tree = context_data["family_tree"]
-                base_prompt += f"- Family Tree: {len(tree['persons'])} related persons available\n"
+                base_prompt += f"\n=== FAMILY TREE CONTEXT ===\n"
+                base_prompt += f"Connected Persons: {len(tree.get('persons', []))}\n"
+                base_prompt += f"Family Relationships: {len(tree.get('relationships', []))}\n"
+                
+                # List key family members
+                persons = tree.get('persons', [])
+                if persons:
+                    base_prompt += "Family members in this context:\n"
+                    for person in persons[:8]:  # Show first 8 family members
+                        base_prompt += f"  - {person.get('display_name', 'Unknown')} ({person.get('life_span', 'dates unknown')})\n"
             
             if "mentioned_persons" in context_data:
                 persons = context_data["mentioned_persons"]
-                base_prompt += f"- Mentioned Persons: {len(persons)} potentially relevant persons found\n"
+                base_prompt += f"\n=== SEARCH RESULTS ===\n"
+                base_prompt += f"Persons matching search criteria: {len(persons)}\n"
+                for person in persons:
+                    base_prompt += f"  - {person.get('display_name', 'Unknown')} ({person.get('life_span', 'dates unknown')})\n"
+                    if person.get('birth_place') or person.get('death_place'):
+                        places = []
+                        if person.get('birth_place'):
+                            places.append(f"b. {person['birth_place']}")
+                        if person.get('death_place'):
+                            places.append(f"d. {person['death_place']}")
+                        base_prompt += f"    Places: {', '.join(places)}\n"
+        
+        base_prompt += "\n**REMINDER**: This is ALL the data available. Do not add information not explicitly listed above. If asked about details not present in this data, clearly state that the information is not available in the family tree database.\n"
         
         return base_prompt
     

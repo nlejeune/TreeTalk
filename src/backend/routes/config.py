@@ -124,6 +124,55 @@ async def get_api_key_status(
         )
 
 
+@router.delete("/api-key")
+async def clear_api_configuration(
+    db: AsyncSession = Depends(get_database_session)
+):
+    """
+    Clear API configuration (OpenRouter key and default model).
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        Success confirmation
+        
+    Raises:
+        HTTPException: If clearing fails
+    """
+    try:
+        # Delete the API key and model settings
+        deleted_keys = []
+        
+        if await Configuration.delete_value(db, "openrouter_api_key"):
+            deleted_keys.append("OpenRouter API key")
+            
+        if await Configuration.delete_value(db, "default_model"):
+            deleted_keys.append("Default model")
+        
+        if not deleted_keys:
+            return {
+                "success": True,
+                "message": "No API configuration found to clear",
+                "cleared_fields": []
+            }
+        
+        logger.info(f"Cleared API configuration: {', '.join(deleted_keys)}")
+        
+        return {
+            "success": True,
+            "message": f"Successfully cleared: {', '.join(deleted_keys)}",
+            "cleared_fields": deleted_keys
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to clear API configuration: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear configuration: {str(e)}"
+        )
+
+
 @router.post("/setting")
 async def set_configuration_value(
     request: ConfigurationRequest,

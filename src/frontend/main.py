@@ -174,6 +174,10 @@ class TreeTalkAPI:
         """Get API key configuration status."""
         result = self._make_request("GET", "/api/config/api-key/status")
         return result if result else {}
+    
+    def clear_api_configuration(self) -> Optional[Dict]:
+        """Clear API configuration (OpenRouter key and model)."""
+        return self._make_request("DELETE", "/api/config/api-key")
 
 
 def initialize_session_state():
@@ -557,9 +561,19 @@ def render_configuration_tab():
     # Configuration form
     with st.form("api_config_form"):
         st.write("**OpenRouter API Key**")
+        
+        # Show current API key status and provide appropriate placeholder
+        if api_status.get('openrouter_api_key_configured', False):
+            api_key_placeholder = "Leave empty to keep current API key, or enter new key to replace"
+            api_key_label = "Update your OpenRouter API key (optional):"
+        else:
+            api_key_placeholder = "Enter your OpenRouter API key"
+            api_key_label = "Enter your OpenRouter API key:"
+        
         api_key_input = st.text_input(
-            "Enter your OpenRouter API key:",
+            api_key_label,
             type="password",
+            placeholder=api_key_placeholder,
             help="Get your API key from https://openrouter.ai/keys"
         )
         
@@ -571,21 +585,58 @@ def render_configuration_tab():
         if available_models:
             model_options = {}
             for model in available_models:
-                cost_info = f" (${model.get('cost_per_1k_tokens', 0):.3f}/1K tokens)" if model.get('cost_per_1k_tokens') else ""
-                display_name = f"{model.get('name', model.get('id'))}{cost_info}"
+                cost = model.get('cost_per_1k_tokens', 0)
+                if cost == 0:
+                    cost_info = " (FREE)"
+                else:
+                    cost_info = f" (${cost:.4f}/1K tokens)"
+                
+                model_name = model.get('name', model.get('id'))
+                display_name = f"{model_name}{cost_info}"
                 model_options[display_name] = model.get('id')
+            
+            # Find the currently saved model to set as default
+            current_model = api_status.get('default_model', 'openai/gpt-3.5-turbo')
+            current_index = 0  # Default to first option if current model not found
+            
+            # Find the index of the current model in the display options
+            for idx, (display_name, model_id) in enumerate(model_options.items()):
+                if model_id == current_model:
+                    current_index = idx
+                    break
             
             selected_model_display = st.selectbox(
                 "Select AI model for chat:",
                 options=list(model_options.keys()),
-                help="Models are sorted by cost (free/cheaper models first)"
+                index=current_index,
+                help="Models are sorted by cost (free/cheaper models first). Pricing shown is per 1,000 tokens."
             )
             selected_model = model_options.get(selected_model_display)
+            
+            # Show model details for selected model
+            if selected_model:
+                selected_model_info = next((m for m in available_models if m.get('id') == selected_model), None)
+                if selected_model_info:
+                    with st.expander("ℹ️ Model Details", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.text(f"Model ID: {selected_model_info.get('id')}")
+                            st.text(f"Context Length: {selected_model_info.get('context_length', 'N/A'):,}")
+                        with col2:
+                            cost = selected_model_info.get('cost_per_1k_tokens', 0)
+                            if cost == 0:
+                                st.text("Cost: FREE")
+                            else:
+                                st.text(f"Cost/1K tokens: ${cost:.4f}")
+                        
+                        if selected_model_info.get('description'):
+                            st.text(f"Description: {selected_model_info['description']}")
         else:
+            st.warning("⚠️ Unable to load models from OpenRouter. Please check your API key or network connection.")
             selected_model = st.text_input(
                 "Model name:",
                 value="openai/gpt-3.5-turbo",
-                help="Enter model name (e.g., openai/gpt-3.5-turbo, anthropic/claude-3-haiku)"
+                help="Enter model name manually (e.g., openai/gpt-3.5-turbo, anthropic/claude-3-haiku)"
             )
         
         # Submit button
@@ -606,6 +657,24 @@ def render_configuration_tab():
                     st.error("❌ Failed to save configuration. Please check your inputs.")
             else:
                 st.warning("Please provide at least an API key or model selection.")
+    
+    # Clear API Configuration section (only show if API key is configured)
+    if api_status.get('openrouter_api_key_configured'):
+        st.markdown("---")
+        st.subheader("🗑️ Clear Configuration")
+        st.write("If you're experiencing issues with your API key, you can clear the saved configuration and re-enter it.")
+        
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🗑️ Clear API Key", help="Clear the stored OpenRouter API key", type="secondary"):
+                with st.spinner("Clearing configuration..."):
+                    result = st.session_state.api_client.clear_api_configuration()
+                
+                if result and result.get('success'):
+                    st.success("✅ Configuration cleared! Please refresh the page and re-enter your API key.")
+                    st.info("💡 **Tip**: Make sure to re-enter your API key after refreshing the page.")
+                else:
+                    st.error("❌ Failed to clear configuration.")
     
     # Information section
     st.markdown("---")

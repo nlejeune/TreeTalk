@@ -134,15 +134,22 @@ class Person(Base):
         Get formatted life span string.
         
         Returns:
-            str: Life span in format "YYYY-YYYY" or "YYYY-present"
+            str: Life span in format "YYYY-YYYY", "YYYY-present", "YYYY-?", or "?-?"
         """
         birth_str = self.birth_date.strftime("%Y") if self.birth_date else "?"
         if self.death_date:
             death_str = self.death_date.strftime("%Y")
             return f"{birth_str}-{death_str}"
-        elif not self.is_living and self.birth_date:
+        elif not self.is_living:
             return f"{birth_str}-?"
         else:
+            # For living people with no death date
+            if not self.birth_date:
+                return "?-?"
+            # Check age if birth date is known
+            current_age = self.get_age()
+            if current_age is not None and current_age >= 100:
+                return f"{birth_str}-?"
             return f"{birth_str}-present"
     
     def to_dict(self, include_private: bool = False) -> Dict[str, Any]:

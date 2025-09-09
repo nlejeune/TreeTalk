@@ -35,7 +35,24 @@ class Configuration(Base):
             print(f"Generated new secret key: {key.decode()}")
             print("Set TREETALK_SECRET_KEY environment variable for production")
         else:
-            key = key.encode()
+            # If key is provided as string, assume it's base64-encoded
+            try:
+                key = key.encode()
+            except AttributeError:
+                # Key is already bytes
+                pass
+            
+            # Validate that the key is properly formatted for Fernet
+            try:
+                # Test the key by creating a Fernet instance
+                test_cipher = Fernet(key)
+            except Exception:
+                # If the provided key is invalid, generate a new one for development
+                print(f"Invalid TREETALK_SECRET_KEY provided, generating new one")
+                key = Fernet.generate_key()
+                print(f"Generated new secret key: {key.decode()}")
+                print("Set TREETALK_SECRET_KEY environment variable with this value")
+        
         return Fernet(key)
     
     @classmethod

@@ -199,19 +199,35 @@ async def get_available_models(
         models = await chat_service.get_available_models()
         
         if not models:
-            # Return default models if OpenRouter is not available
+            # Return default models if OpenRouter is not available (sorted by cost)
             models = [
                 {
-                    "id": "openai/gpt-3.5-turbo",
-                    "name": "GPT-3.5 Turbo",
-                    "cost_per_1k_tokens": 2.0,
-                    "description": "Fast and efficient model for conversational AI"
+                    "id": "meta-llama/llama-3.1-8b-instruct:free",
+                    "name": "Llama 3.1 8B Instruct (Free)",
+                    "cost_per_1k_tokens": 0.0,
+                    "context_length": 131072,
+                    "description": "Free open-source model with good performance"
+                },
+                {
+                    "id": "openai/gpt-4o-mini",
+                    "name": "GPT-4o Mini",
+                    "cost_per_1k_tokens": 0.0002,
+                    "context_length": 128000,
+                    "description": "Affordable small model with high intelligence"
                 },
                 {
                     "id": "anthropic/claude-3-haiku",
                     "name": "Claude 3 Haiku",
-                    "cost_per_1k_tokens": 1.5,
-                    "description": "Balanced performance and cost"
+                    "cost_per_1k_tokens": 0.0008,
+                    "context_length": 200000,
+                    "description": "Fastest model with strong performance"
+                },
+                {
+                    "id": "openai/gpt-3.5-turbo",
+                    "name": "GPT-3.5 Turbo",
+                    "cost_per_1k_tokens": 0.002,
+                    "context_length": 4096,
+                    "description": "Fast and efficient model for conversational AI"
                 }
             ]
         
@@ -226,7 +242,8 @@ async def get_available_models(
             {
                 "id": "openai/gpt-3.5-turbo",
                 "name": "GPT-3.5 Turbo",
-                "cost_per_1k_tokens": 2.0,
+                "cost_per_1k_tokens": 0.002,
+                "context_length": 4096,
                 "description": "Default model (OpenRouter API key required for full access)"
             }
         ]

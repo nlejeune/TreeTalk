@@ -273,9 +273,3 @@ TreeTalk follows a three-tier architecture pattern optimized for genealogical da
 - **Rationale**: Multi-model access, cost optimization, unified API interface
 - **Trade-offs**: Additional service dependency vs model flexibility and cost control
 - **Implementation**: Dynamic model selection, pricing transparency, comprehensive error handling
-
-### 10.5 No Docker Containerization (Currently)
-- **Decision**: Direct Python execution for initial deployment
-- **Rationale**: Simplified development and deployment, reduced complexity for MVP
-- **Trade-offs**: Environment consistency vs deployment simplicity
-- **Future**: Docker support planned for production deployments
